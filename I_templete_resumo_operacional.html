@@ -3801,10 +3801,20 @@ $('out-tudo')?.addEventListener('click', () => {
       'ALPARGATAS': ['in_vei', 'in_cx', 'out_vei', 'out_cx']
     };
     IO_TPC['BOTICARIO'] = IO_TPC['BOTICÁRIO']; IO_TPC['OMNILIFE'] = IO_TPC['OMNLIFE'];
-    // indicadores de cada cliente: JSL = padrão JSL · TPC = IN/OUT do cliente + NC, Ocupação e GENTE padrão
+    // JSL: indicadores que o cliente não tem/não utiliza (saem do Monitoramento do HTML e das abas
+    // Monitoramento e Consol Mensal do Excel). GM: sem IN e sem Ocupação · Mondelez (CROSS) e
+    // Nestlé (SPOT): sem Posições Disponíveis e Taxa de Ocupação (fica só Posições Ocupadas).
+    const SEM_IND_JSL = {
+      'GM': ['in_vei', 'in_pal', 'in_ton', 'occ_disp', 'occ_ocup', 'occ_tx'],
+      'MONDELEZ': ['occ_disp', 'occ_tx'],
+      'NESTLE': ['occ_disp', 'occ_tx']
+    };
+    SEM_IND_JSL['NESTLÉ'] = SEM_IND_JSL['NESTLE'];
+    // indicadores de cada cliente: JSL = padrão JSL (menos SEM_IND_JSL) · TPC = IN/OUT do cliente + NC, Ocupação e GENTE padrão
     function setDoCliente(c) {
-      if (depDoCliente(c) !== 'TPC') return SET_JSL;
-      const io = IO_TPC[String(c).trim().toUpperCase()];
+      const cu = String(c).trim().toUpperCase();
+      if (depDoCliente(c) !== 'TPC') { const fora = SEM_IND_JSL[cu]; return fora ? SET_JSL.filter(k => !fora.includes(k)) : SET_JSL; }
+      const io = IO_TPC[cu];
       return io ? io.concat(SET_COMUM) : SET_TPC;
     }
     const depDoCliente = c => DEP_CLI[c] || DEPOSITOS[0] || 'JSL';
