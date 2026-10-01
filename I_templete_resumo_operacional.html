@@ -3647,7 +3647,8 @@ $('out-tudo')?.addEventListener('click', () => {
             ? `<c:spPr>${ln}</c:spPr>` + (s.semMarcador || s.tracejado ? '<c:marker><c:symbol val="none"/></c:marker>' : `<c:marker><c:symbol val="circle"/><c:size val="5"/><c:spPr><a:solidFill><a:srgbClr val="${s.cor}"/></a:solidFill><a:ln><a:noFill/></a:ln></c:spPr></c:marker>`)
             : `<c:spPr><a:solidFill><a:srgbClr val="${s.cor}"/></a:solidFill><a:ln><a:noFill/></a:ln></c:spPr><c:invertIfNegative val="0"/>`;
           const rot = s.rotulo === undefined ? !o.semRotulo : s.rotulo;
-          return `<c:ser><c:idx val="${i}"/><c:order val="${i}"/><c:tx><c:v>${xe(s.nome)}</c:v></c:tx>${sp}${rot ? dl(ehLinha) : ''}${cat}<c:val><c:numRef><c:f>${xe(s.ref)}</c:f>${numCache(s.vals)}</c:numRef></c:val>${ehLinha ? '<c:smooth val="0"/>' : ''}</c:ser>`;
+          const tx = s.nomeRef ? `<c:tx><c:strRef><c:f>${xe(s.nomeRef)}</c:f>${strCache([s.nome])}</c:strRef></c:tx>` : `<c:tx><c:v>${xe(s.nome)}</c:v></c:tx>`;
+          return `<c:ser><c:idx val="${i}"/><c:order val="${i}"/>${tx}${sp}${rot ? dl(ehLinha) : ''}${cat}<c:val><c:numRef><c:f>${xe(s.ref)}</c:f>${numCache(s.vals)}</c:numRef></c:val>${ehLinha ? '<c:smooth val="0"/>' : ''}</c:ser>`;
         };
         const idx = o.series.map((s, i) => ({ s, i }));
         const barras = todasLinha ? [] : idx.filter(x => !x.s.linha), linhas = todasLinha ? idx : idx.filter(x => x.s.linha);
@@ -3810,6 +3811,45 @@ $('out-tudo')?.addEventListener('click', () => {
       'NESTLE': ['occ_disp', 'occ_tx']
     };
     SEM_IND_JSL['NESTLÉ'] = SEM_IND_JSL['NESTLE'];
+    // ── Dashboard do Excel: perfil por cliente (linhas de apoio dos cards IN/OUT e gráficos 2 e 3) ──
+    const IND_EXTRA_DASH = ['in_lnf', 'in_cx', 'in_pec', 'in_itn', 'in_icm', 'in_cxf', 'in_cxm',
+      'out_ped', 'out_pfat', 'out_itn', 'out_pec', 'out_lnf', 'out_cx'];
+    const ROTULO_DASH = {
+      in_pal: 'pallets movimentados', in_ton: 't movimentadas', in_lnf: 'linhas NF', in_cx: 'caixas movimentadas', in_pec: 'peças movimentadas',
+      in_itn: 'itens recebidos', in_icm: 'itens cx mista', in_cxf: 'caixas fechadas', in_cxm: 'caixas mistas',
+      out_pal: 'pallets movimentados', out_ton: 't movimentadas', out_ped: 'pedidos expedidos', out_pfat: 'pedidos faturados',
+      out_itn: 'itens expedidos', out_pec: 'peças movimentadas', out_lnf: 'linhas NF', out_cx: 'caixas expedidas'
+    };
+    const FAM_DASH = { pal: 'pal', ton: 'ton', lnf: 'lnf', cx: 'cx', cxm: 'cx', cxf: 'cx', itn: 'itn', icm: 'itn', pec: 'pec', ped: 'ped', pfat: 'ped' };
+    const FAM_TIT = { pal: 'PALETES', ton: 'TONS', lnf: 'LINHAS NF', cx: 'CAIXAS', itn: 'ITENS', pec: 'PEÇAS', ped: 'PEDIDOS' };
+    // c = código do cliente (null = Todos / depósito) · IX = indicadores disponíveis na exportação
+    function perfilDashboard(c, IX) {
+      const tem = k => IX[k] !== undefined;
+      const padrao = { in: ['in_pal', 'in_ton'], out: ['out_pal', 'out_ton'] };
+      let ins = padrao.in, outs = padrao.out;
+      if (c) {
+        const set = setDoCliente(c);
+        ins = set.filter(k => k.startsWith('in_') && k !== 'in_vei');
+        outs = set.filter(k => k.startsWith('out_') && k !== 'out_vei');
+        if (ins.length > 3) ins = padrao.in.filter(k => set.includes(k));    // cliente sem perfil próprio
+        if (outs.length > 3) outs = padrao.out.filter(k => set.includes(k));
+      }
+      ins = ins.filter(tem); outs = outs.filter(tem);
+      const fam = k => FAM_DASH[k.split('_')[1]];
+      const charts = [], usaO = new Set(), soltosI = [];
+      ins.forEach(i => { const o = outs.find(x => !usaO.has(x) && fam(x) === fam(i)); if (o) { usaO.add(o); charts.push({ in: i, out: o }); } else soltosI.push(i); });
+      const soltosO = outs.filter(o => !usaO.has(o));
+      for (let j = 0; j < Math.max(soltosI.length, soltosO.length); j++) charts.push({ in: soltosI[j] || null, out: soltosO[j] || null });
+      const titulo = ch => {
+        if (!ch) return { titD: 'SEM OUTRO INDICADOR DE VOLUME PARA ESTE CLIENTE', titS: 'SEM OUTRO INDICADOR DE VOLUME PARA ESTE CLIENTE' };
+        const t = ch.in && ch.out && fam(ch.in) === fam(ch.out) ? FAM_TIT[fam(ch.in)]
+          : [ch.in ? `${IND_CAT[ch.in].curto.toUpperCase()} (IN)` : '', ch.out ? `${IND_CAT[ch.out].curto.toUpperCase()} (OUT)` : ''].filter(Boolean).join(' × ');
+        return { titD: `MOVIMENTAÇÃO ${t}/DIA`, titS: `ACUMULADO SEMANAL ${t}` };
+      };
+      const ch = j => Object.assign({ in: null, out: null }, charts[j] || {}, titulo(charts[j]));
+      return { inA: [ins[0] || null, null], inB: [ins[1] || null, ins[2] || null], outA: [outs[0] || null, null], outB: [outs[1] || null, outs[2] || null], chA: ch(0), chB: ch(1) };
+    }
+
     // indicadores de cada cliente: JSL = padrão JSL (menos SEM_IND_JSL) · TPC = IN/OUT do cliente + NC, Ocupação e GENTE padrão
     function setDoCliente(c) {
       const cu = String(c).trim().toUpperCase();
@@ -4335,7 +4375,8 @@ $('out-tudo')?.addEventListener('click', () => {
           K.put(PK0 - 1, 1, 'INDICADORES DO PERÍODO (cards do Dashboard)', { font: { b: 1, sz: 10, color: XL_COR.vermelho }, align: { h: 'left' } });
           ['Indicador', 'Período', 'Período anterior', 'Variação'].forEach((h, i) => K.put(PK0, 1 + i, h, stH));
           const LIN = ['in_vei', 'in_pal', 'in_ton', 'out_vei', 'out_pal', 'out_ton', 'nc_inc', 'nc_ns', 'nc_bkl', 'occ_ocup', 'occ_disp', 'occ_tx', 'oci',
-            'gen_efe', 'hd', 'gen_fal', 'abs', 'gen_fol', 'gen_fer', 'gen_des', 'turn', 'gen_dsv', 'gen_caf', 'gen_saf'];
+            'gen_efe', 'hd', 'gen_fal', 'abs', 'gen_fol', 'gen_fer', 'gen_des', 'turn', 'gen_dsv', 'gen_caf', 'gen_saf']
+            .concat(IND_EXTRA_DASH.filter(k => IX[k] !== undefined));   // TPC: indicadores próprios de cada cliente
           const ROT = { oci: 'OCUPAÇÃO (P.P) · Ociosidade', hd: 'GENTE · Homem-dia (soma do efetivo diário)', abs: 'GENTE · Absenteísmo (H/H) = faltas ÷ homem-dia', turn: 'GENTE · Turnover = desligamentos ÷ efetivo' };
           const pct = k => ['occ_tx', 'oci', 'abs', 'turn'].includes(k);
           const P = {};
@@ -4365,7 +4406,94 @@ $('out-tudo')?.addEventListener('click', () => {
             P[k].vr = num(P[k].at) && num(P[k].an) && P[k].an !== 0 ? P[k].at / P[k].an - 1 : '';
             K.put(rr, 4, { f: `IF(AND(ISNUMBER(B${rr}),ISNUMBER(C${rr})),IF(C${rr}<>0,B${rr}/C${rr}-1,""),"")`, v: P[k].vr }, { font: { sz: 9 }, fmt: '0.0%' });
           });
-          return { P, sDI, sDF, sPI, sPF };
+          const PERF = montarPerfil(P, LIN, PK0 + LIN.length + 7);
+          return { P, sDI, sDF, sPI, sPF, PERF };
+        }
+
+        // ════ PERFIL DO DASHBOARD POR CLIENTE — cards (linhas de apoio IN/OUT) e gráficos 2 e 3 ════
+        // Cada cliente TPC mede IN/OUT diferentes (IO_TPC). A linha do filtro escolhido no Dashboard
+        // (célula D3) decide o que aparece; tudo por fórmula, sem macro.
+        function montarPerfil(P, LIN, PF0) {
+          const nmCli = Object.fromEntries(clis.map(c => [nomeCli(c), c]));
+          const linhas = listaFiltro.map(nm => ({ nm, pf: perfilDashboard(nmCli[nm] || null, IX) }));
+          const SLOTS = ['inA', 'inB', 'outA', 'outB'];
+          const posL = k => k ? LIN.indexOf(k) + 1 : 0;
+          const decK = k => ['in_ton', 'out_ton'].includes(k) ? 1 : 0;
+          const colInd = k => k && IX[k] !== undefined ? IX[k] + 1 : 0;   // posição na faixa C:… da série diária
+          // cabeçalho
+          const cab = ['Filtro'];
+          SLOTS.forEach(sl => [1, 2].forEach(j => cab.push(`${sl} ind${j} (linha)`, `${sl} rótulo${j}`, `${sl} casas${j}`)));
+          ['A', 'B'].forEach(g => cab.push(`Gráf ${g} IN (col)`, `Gráf ${g} OUT (col)`, `Gráf ${g} título diário`, `Gráf ${g} título semanal`, `Gráf ${g} série IN`, `Gráf ${g} série OUT`));
+          K.put(PF0 - 2, 1, 'PERFIL DO DASHBOARD POR CLIENTE — o que cada cliente mostra nos cards IN/OUT e nos gráficos (pode ajustar: linha = posição na tabela INDICADORES DO PERÍODO; col = posição na série diária, 0 = nada)', { font: { b: 1, sz: 10, color: XL_COR.vermelho }, align: { h: 'left' } });
+          cab.forEach((h, i) => K.put(PF0, 1 + i, h, stH));
+          K.alt[PF0] = 40;
+          linhas.forEach(({ nm, pf }, i) => {
+            const rr = PF0 + 1 + i, vals = [nm];
+            SLOTS.forEach(sl => [0, 1].forEach(j => { const k = pf[sl][j]; vals.push(posL(k), k ? ROTULO_DASH[k] : '', decK(k)); }));
+            ['chA', 'chB'].forEach(g => { const ch = pf[g]; vals.push(colInd(ch.in), colInd(ch.out), ch.titD, ch.titS, ch.in ? 'IN · ' + IND_CAT[ch.in].nome : 'IN', ch.out ? 'OUT · ' + IND_CAT[ch.out].nome : 'OUT'); });
+            vals.forEach((v, c) => K.put(rr, 1 + c, v, c === 0 ? { font: { sz: 8 }, align: { h: 'left' } } : Object.assign({ font: { sz: 8, color: '0000FF' } }, typeof v === 'number' ? {} : { align: { h: 'left' } })));
+          });
+          const PFL = PF0 + Math.max(1, linhas.length), NC = cab.length;
+          // linha escolhida (segue o filtro do Dashboard)
+          const SR = PF0 - 1, iSel = Math.max(0, listaFiltro.indexOf(nomeSel)), pfSel = linhas[iSel].pf;
+          K.put(SR, 1, { f: `IFERROR(MATCH($B$2,$A$${PF0 + 1}:$A$${PFL},0),1)`, v: iSel + 1 }, { font: { b: 1, sz: 8 }, fmt: '0' });
+          const cel = c => `$${XL.colL(c)}$${SR}`;
+          for (let c = 2; c <= NC; c++) {
+            const v = K.cel(PF0 + 1 + iSel, c).v;
+            K.put(SR, c, { f: `INDEX($${XL.colL(c)}$${PF0 + 1}:$${XL.colL(c)}$${PFL},$A$${SR})&""`, v: v === undefined ? '' : String(v) }, { font: { b: 1, sz: 8 }, fill: XL_COR.entrada, align: { h: 'left' } });
+          }
+          // texto de cada linha de apoio dos cards: "1.234 pallets movimentados · 56 t movimentadas"
+          const TX = {}, faixaB = `$B$${P[LIN[0]].r}:$B$${P[LIN[LIN.length - 1]].r}`;
+          const fmtNum = (v, d) => typeof v === 'number' ? v.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—';
+          K.put(PF0 - 4, 1, 'Textos das linhas de apoio dos cards (Dashboard)', { font: { b: 1, sz: 8 }, align: { h: 'left' } });
+          SLOTS.forEach((sl, si) => {
+            const c0 = 2 + si * 6, rr = PF0 - 3, cc = 1 + si * 2;
+            const parte = j => {
+              const cP = cel(c0 + j * 3), cR = cel(c0 + j * 3 + 1), cD = cel(c0 + j * 3 + 2), val = `INDEX(${faixaB},VALUE(${cP}))`;
+              return `IF(N(VALUE(${cP}))=0,"",IF(ISNUMBER(${val}),FIXED(${val},VALUE(${cD})),"—")&" "&${cR})`;
+            };
+            const f = `${parte(0)}&IF(AND(N(VALUE(${cel(c0)}))>0,N(VALUE(${cel(c0 + 3)}))>0),"  ·  ","")&${parte(1)}`;
+            const ks = pfSel[sl].filter(Boolean);
+            const v = ks.map(k => `${fmtNum(P[k].at, decK(k))} ${ROTULO_DASH[k]}`).join('  ·  ');
+            K.put(rr, cc, sl, { font: { sz: 8 } });
+            K.put(rr, cc + 1, { f, v }, { font: { sz: 8 }, align: { h: 'left' } });
+            TX[sl] = { ref: `calculos!$${XL.colL(cc + 1)}$${rr}`, v };
+          });
+          // séries dos gráficos 2 e 3 (diário e semanal) — colunas à direita da série diária
+          const HC = LC + 12, cg = { A: 2 + 24, B: 2 + 24 + 6 };
+          const SER = {};
+          ['A', 'B'].forEach((g, gi) => {
+            const ch = pfSel['ch' + g];
+            [['in', 0], ['out', 1]].forEach(([lado, j]) => {
+              const c = HC + gi * 2 + j, cCol = cel(cg[g] + j), L = XL.colL(c);
+              K.put(11, c, `Gráf ${g} ${lado.toUpperCase()} (diário)`, stH);
+              K.cols[c] = 11;
+              const k = ch[lado], vals = k ? colD(IND[IX[k]].kc) : Array(31).fill('');
+              for (let d = 1; d <= 31; d++) {
+                const rr = KR0 + d - 1, faixa = `$C${rr}:$${XL.colL(2 + IND.length)}${rr}`, x = `INDEX(${faixa},VALUE(${cCol}))`;
+                K.put(rr, c, { f: `IF(OR($B${rr}="",N(VALUE(${cCol}))=0),"",IF(${x}="","",${x}))`, v: vals[d - 1] }, { font: { sz: 9 }, fmt: '#,##0.0' });
+              }
+              K.put(WT, c, `Gráf ${g} ${lado.toUpperCase()} (semanal)`, stH);
+              const sem = [];
+              [[1, 7], [8, 14], [15, 21], [22, 28], [29, 31]].forEach(([d1, d2], w) => {
+                const rr = WT + 1 + w, v = k ? soma(vals.slice(d1 - 1, d2)) : '';
+                sem.push(v);
+                K.put(rr, c, { f: `IF(N(VALUE(${cCol}))=0,"",SUMIFS(${L}$${KR0}:${L}$${KRL},$A$${KR0}:$A$${KRL},">="&$B${rr},$A$${KR0}:$A$${KRL},"<="&$C${rr}))`, v }, { font: { sz: 9 }, fmt: '#,##0.0' });
+              });
+              SER[g + lado] = {
+                dia: { ref: `calculos!$${L}$${KR0}:$${L}$${KRL}`, vals }, sem: { ref: `calculos!$${L}$${WT + 1}:$${L}$${WT + 5}`, vals: sem },
+                nome: { ref: `calculos!${cel(cg[g] + 4 + j)}`, v: ch[lado] ? `${lado.toUpperCase()} · ${IND_CAT[ch[lado]].nome}` : lado.toUpperCase() }
+              };
+            });
+            // títulos dinâmicos dos gráficos 2/3 (substituem paletes/tons fixos)
+            const cli = `IF(${TODOS},"TODOS OS CLIENTES",UPPER($B$2))`, cv = TD ? 'TODOS OS CLIENTES' : nomeSel.toUpperCase();
+            [['xpal', 'xspal'], ['xton', 'xston']][gi].forEach((kT, t) => {
+              const cT = cel(cg[g] + 2 + t), rr = +TIT[kT].ref.split('$').pop(), v = `${t ? ch.titS : ch.titD} — ${cv}`;
+              K.put(rr, L_TIT, { f: `${cT}&" — "&${cli}`, v }, { font: { sz: 9 }, align: { h: 'left' } });
+              TIT[kT].v = v;
+            });
+          });
+          return { TX, SER };
         }
 
         // ════ CLIENTES VISÍVEIS do Resumo por cliente (Consol Mensal), conforme o filtro da própria aba ════
@@ -4515,12 +4643,14 @@ $('out-tudo')?.addEventListener('click', () => {
       // IN
       let [c0, cz] = tile(0, 'RECEBIMENTO (IN)', XL_COR.in, XL_IMG.in);
       grande(c0, cz, 'in_vei', 'veículos recebidos');
-      apoio(RC1 + 4, c0, cz, 'in_pal', '#,##0" Pallets Movimentados"'); apoio(RC1 + 5, c0, cz, 'in_ton', '#,##0.0" t movimentadas"');
+      const PFX = PERx.PERF;
+      const apoioTx = (rr, c0, cz, sl) => X.caixa(rr, c0, rr, cz, { f: PFX.TX[sl].ref, v: PFX.TX[sl].v }, { fill: fundo, font: { sz: 10, color: '6E7078' }, align: { h: 'center', wrap: 1 } }, null);
+      apoioTx(RC1 + 4, c0, cz, 'inA'); apoioTx(RC1 + 5, c0, cz, 'inB');
       variacao(c0, cz, 'in_vei', 'maior');
       // OUT
       [c0, cz] = tile(1, 'EXPEDIÇÃO (OUT)', XL_COR.out, XL_IMG.out);
       grande(c0, cz, 'out_vei', 'veículos expedidos');
-      apoio(RC1 + 4, c0, cz, 'out_pal', '#,##0" Pallets Movimentados"'); apoio(RC1 + 5, c0, cz, 'out_ton', '#,##0.0" t movimentadas"');
+      apoioTx(RC1 + 4, c0, cz, 'outA'); apoioTx(RC1 + 5, c0, cz, 'outB');
       variacao(c0, cz, 'out_vei', 'maior');
       // NC OPERACIONAIS
       [c0, cz] = tile(2, 'NC OPERACIONAIS', XL_COR.nc, XL_IMG.nc);
@@ -4571,13 +4701,20 @@ $('out-tudo')?.addEventListener('click', () => {
       X.charts.push({ r1: g1, c1: XD[0], r2: g1 + HG - 1, c2: XD[1], xml: XL.grafico({ tipo: 'col', titulo: C1.TIT.xocc, cat: dias31(C1), semRotulo: 1, eixoVal: 1, fmtEixo: '#,##0" p.p"', gap: 40, series: [
         serK(C1, 'occ_ocup', 'Ocupada (p.p)', XL_COR.barra),
         serK(C1, 'occ_disp', 'Contratada (p.p)', '404040', { linha: 1, semMarcador: 1, rotulo: false })] }) });
-      X.charts.push({ r1: g2, c1: XE[0], r2: g2 + HG - 1, c2: XE[1], xml: dupla(C1.TIT.xpal, 'in_pal', 'out_pal', 'Pallets IN', 'Pallets OUT') });
-      X.charts.push({ r1: g2, c1: XD[0], r2: g2 + HG - 1, c2: XD[1], xml: dupla(C1.TIT.xton, 'in_ton', 'out_ton', 'Toneladas IN', 'Toneladas OUT', { fmtEixo: '#,##0' }) });
+      // gráficos 2 e 3: indicadores do cliente filtrado (perfil na aba calculos)
+      const SERX = PFX.SER;
+      const sPerf = (g, lado, tipo, cor) => ({ nome: SERX[g + lado].nome.v, nomeRef: SERX[g + lado].nome.ref, ref: SERX[g + lado][tipo].ref, vals: SERX[g + lado][tipo].vals, cor });
+      const duplaPerf = (titulo, g) => XL.grafico({ tipo: 'col', titulo, cat: dias31(C1), semRotulo: 1, eixoVal: 1, gap: 60, fmtEixo: '#,##0',
+        series: [sPerf(g, 'in', 'dia', XL_COR.barra), sPerf(g, 'out', 'dia', 'A6A6A6')] });
+      X.charts.push({ r1: g2, c1: XE[0], r2: g2 + HG - 1, c2: XE[1], xml: duplaPerf(C1.TIT.xpal, 'A') });
+      X.charts.push({ r1: g2, c1: XD[0], r2: g2 + HG - 1, c2: XD[1], xml: duplaPerf(C1.TIT.xton, 'B') });
       const fSem = c => `calculos!$${XL.colL(c)}$${C1.WT + 1}:$${XL.colL(c)}$${C1.WT + 5}`;
       const semanal = (titulo, cIn, cOut, vIn, vOut, fm) => XL.grafico({ tipo: 'col', titulo, cat: { ref: fSem(1), vals: C1.semTon.rot }, fmtRot: fm, szRot: 10, szCat: 9, gap: 70, series: [
         { nome: 'IN', ref: fSem(cIn), vals: vIn, cor: XL_COR.barra }, { nome: 'OUT', ref: fSem(cOut), vals: vOut, cor: 'A6A6A6' }] });
-      X.charts.push({ r1: g3, c1: XE[0], r2: g3 + HG - 1, c2: XE[1], xml: semanal(C1.TIT.xspal, 6, 7, C1.semTon.pin, C1.semTon.pout, '#,##0;;') });
-      X.charts.push({ r1: g3, c1: XD[0], r2: g3 + HG - 1, c2: XD[1], xml: semanal(C1.TIT.xston, 4, 5, C1.semTon.in, C1.semTon.out, '#,##0;;') });
+      const semPerf = (titulo, g) => XL.grafico({ tipo: 'col', titulo, cat: { ref: fSem(1), vals: C1.semTon.rot }, fmtRot: '#,##0;;', szRot: 10, szCat: 9, gap: 70,
+        series: [sPerf(g, 'in', 'sem', XL_COR.barra), sPerf(g, 'out', 'sem', 'A6A6A6')] });
+      X.charts.push({ r1: g3, c1: XE[0], r2: g3 + HG - 1, c2: XE[1], xml: semPerf(C1.TIT.xspal, 'A') });
+      X.charts.push({ r1: g3, c1: XD[0], r2: g3 + HG - 1, c2: XD[1], xml: semPerf(C1.TIT.xston, 'B') });
       X.caixa(g3 + HG, 2, g3 + HG, XU, `Cards: período digitado (dia inicial e final). Gráficos: mês do dia inicial. Absenteísmo (H/H) = faltas ÷ homem-dia (soma do efetivo diário) · Turnover = desligamentos ÷ efetivo · CAF/SAF = acidentes com / sem afastamento. Metas: aba BD. Fonte: Power Automate · IntraLog.`, { font: { i: 1, sz: 8, color: '9A9A9A' }, align: { h: 'left' } }, null);
       X.areaImp = `$A$1:$${XL.colL(XU + 1)}$${g3 + HG}`;
       X.primeira = !UNI;
