@@ -3543,6 +3543,13 @@ $('out-tudo')?.addEventListener('click', () => {
       }
 
       // ---------- planilha ----------
+      // hash da senha de proteção (algoritmo legado do Excel: aceito por Excel e LibreOffice)
+      function senhaExcel(p) {
+        let h = 0;
+        for (let i = p.length - 1; i >= 0; i--) { h = ((h >> 14) & 1) | ((h << 1) & 0x7fff); h ^= p.charCodeAt(i); }
+        h = ((h >> 14) & 1) | ((h << 1) & 0x7fff); h ^= p.length; h ^= 0xCE4B;
+        return h.toString(16).toUpperCase().padStart(4, '0');
+      }
       class Aba {
         constructor(nome, E) {
           this.nome = nome; this.E = E; this.rows = new Map(); this.cols = {}; this.alt = {};
@@ -3606,6 +3613,7 @@ $('out-tudo')?.addEventListener('click', () => {
             `<sheetFormatPr defaultRowHeight="${this.defAlt}"/>` +
             (cols ? `<cols>${cols}</cols>` : '') +
             `<sheetData>${sd}</sheetData>` +
+            (this.senha ? `<sheetProtection password="${senhaExcel(this.senha)}" sheet="1" objects="1" scenarios="1"/>` : '') +
             (this.filtro ? `<autoFilter ref="${this.filtro}"/>` : '') +
             (this.merges.length ? `<mergeCells count="${this.merges.length}">${this.merges.map(m => `<mergeCell ref="${m}"/>`).join('')}</mergeCells>` : '') +
             this.cf.map((c, i) => `<conditionalFormatting sqref="${c.sqref}"><cfRule type="expression" dxfId="${c.dxf}" priority="${i + 1}"${c.stop ? ' stopIfTrue="1"' : ''}><formula>${xe(c.f)}</formula></cfRule></conditionalFormatting>`).join('') +
@@ -3668,7 +3676,7 @@ $('out-tudo')?.addEventListener('click', () => {
       }
 
       // ---------- pasta de trabalho ----------
-      function pasta(abas, E, nomesDef = []) {
+      function pasta(abas, E, nomesDef = [], senhaPasta = '') {
         const F = [], ctOver = [], wbRels = [];
         let nImg = 0, nChart = 0, nDraw = 0, nTab = 0;
         abas.forEach((a, i) => {
@@ -3715,7 +3723,7 @@ $('out-tudo')?.addEventListener('click', () => {
           { name: '_rels/.rels', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/></Relationships>` },
           { name: 'docProps/core.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:title>Monitoramento diário de performance</dc:title><dc:creator>IntraLog · Resumo operacional</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${new Date().toISOString().slice(0, 19)}Z</dcterms:created></cp:coreProperties>` },
           { name: 'docProps/app.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>Microsoft Excel</Application></Properties>` },
-          { name: 'xl/workbook.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><bookViews><workbookView activeTab="0"/></bookViews><sheets>${abas.map((a, i) => `<sheet name="${xe(a.nome)}" sheetId="${i + 1}"${a.state ? ` state="${a.state}"` : ''} r:id="rId${i + 1}"/>`).join('')}</sheets>${defs.length ? `<definedNames>${defs.join('')}</definedNames>` : ''}<calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>` },
+          { name: 'xl/workbook.xml', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">${senhaPasta ? `<workbookProtection workbookPassword="${senhaExcel(senhaPasta)}" lockStructure="1"/>` : ''}<bookViews><workbookView activeTab="0"/></bookViews><sheets>${abas.map((a, i) => `<sheet name="${xe(a.nome)}" sheetId="${i + 1}"${a.state ? ` state="${a.state}"` : ''} r:id="rId${i + 1}"/>`).join('')}</sheets>${defs.length ? `<definedNames>${defs.join('')}</definedNames>` : ''}<calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>` },
           { name: 'xl/_rels/workbook.xml.rels', data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${wbRels.join('')}</Relationships>` },
           { name: 'xl/styles.xml', data: E.xml() }
         );
@@ -3921,7 +3929,18 @@ $('out-tudo')?.addEventListener('click', () => {
     const NOMES_MES_F = `{${MESES.map(m => `"${cap1(m)}"`).join(',')}}`;
     const BASE_R0 = 3, BASE_RN = 5001;                  // linhas da Base lidas pelas fórmulas
 
-    function gerarExcelMonitor(mk, clienteInicial) {
+    // opts.vazio: modelo sem dados (BD e metas em branco, sem referência ao Power Automate)
+    // opts.clientes: [códigos] que entram no modelo · opts.cap: { DEP: posições } capacidade do CD no modelo
+    function gerarExcelMonitor(mk, clienteInicial, opts = {}) {
+      if (opts.vazio) {
+        const metasAntes = CFG.metas;
+        CFG.metas = {};
+        try { return gerarExcelMonitorInt(mk, clienteInicial, opts); } finally { CFG.metas = metasAntes; }
+      }
+      return gerarExcelMonitorInt(mk, clienteInicial, opts);
+    }
+    function gerarExcelMonitorInt(mk, clienteInicial, opts) {
+      const VAZIO = !!opts.vazio;
       const E = new XL.Estilos();
       const ano = mk.slice(0, 4), n = diasNoMes(mk);
       const MODO = DEP || (DEPOSITOS.length > 1 ? 'UNI' : (DEPOSITOS[0] || 'JSL'));
@@ -3941,7 +3960,8 @@ $('out-tudo')?.addEventListener('click', () => {
 
       // ---- dados do ano ----
       const datasAno = [...new Set([...IDX.in.keys(), ...IDX.out.keys(), ...IDX.occ.keys(), ...IDX.inc.keys(), ...IDX.gen.keys()])].filter(d => d.startsWith(ano)).sort();
-      const clis = [...new Set([...DB.inbound, ...DB.outbound, ...DB.ocupacao, ...DB.gente].filter(r => r.d.startsWith(ano)).map(r => r.cli))]
+      if (opts.clientes) opts.clientes.forEach(c => { if (!DEP_CLI[c]) DEP_CLI[c] = MODO === 'UNI' ? (DEPOSITOS[0] || 'JSL') : MODO; });
+      const clis = (opts.clientes ? [...new Set(opts.clientes)] : [...new Set([...DB.inbound, ...DB.outbound, ...DB.ocupacao, ...DB.gente].filter(r => r.d.startsWith(ano)).map(r => r.cli))])
         .sort((a, b) => depC(a).localeCompare(depC(b)) || nomeCli(a).localeCompare(nomeCli(b), 'pt-BR'));
       const depsExp = [...new Set(clis.map(depC))];
       // união (na ordem do catálogo) dos indicadores dos clientes + os obrigatórios dos cards
@@ -3952,7 +3972,7 @@ $('out-tudo')?.addEventListener('click', () => {
       const IND_KEYS = MODO === 'TPC' ? SET_MODO : SET_JSL;
       const BASE_KEYS = SET_MODO.filter(k => IND_CAT[k].tipo !== 'taxa');
       const baseRows = [];
-      datasAno.forEach(d => clis.forEach(c => {
+      (VAZIO ? [] : datasAno).forEach(d => clis.forEach(c => {
         const v = valoresDia(d, c);
         const vals = {};
         let tem = false;
@@ -4029,7 +4049,8 @@ $('out-tudo')?.addEventListener('click', () => {
       const cliPorNome = Object.fromEntries(clis.map(c => [nomeCli(c), c]));
       const depCols = UNI ? depsExp.map(d => `Depósito ${d}`) : [];
       const listaFiltro = ['Todos'].concat(depCols, listaCli);
-      const capDep = depsExp.map(d => [d, (CAP_DEP[d] && CAP_DEP[d].valor) || 0, (CAP_DEP[d] && CAP_DEP[d].fonte) || '']);
+      const capDep = VAZIO ? depsExp.map(d => [d, (opts.cap && opts.cap[d]) || 0, (opts.cap && opts.cap[d]) ? 'informada' : ''])
+        : depsExp.map(d => [d, (CAP_DEP[d] && CAP_DEP[d].valor) || 0, (CAP_DEP[d] && CAP_DEP[d].fonte) || '']);
       const CAP_TOT = capDep.reduce((a, x) => a + x[1], 0);
       const mkIni = mk, mkAnt = mesAnterior(mk), nAnt = diasNoMes(mkAnt);
       const temNoMes = baseRows.filter(b => b.d.startsWith(mk));
@@ -4041,7 +4062,7 @@ $('out-tudo')?.addEventListener('click', () => {
       const colsMetaBD = depCols.concat(listaCli);
       const MH = 22, MC0 = IC, MC1 = IC + 1, MCN = IC + 1 + colsMetaBD.length;
       const stHB = { fill: XL_COR.tinta, font: { b: 1, sz: 9, color: 'FFFFFF' }, align: { wrap: 1 } };
-      B.put(MH - 1, MC0, 'METAS DO MÊS — preencha as células amarelas (vazio = sem meta · taxa de ocupação em %). Saem preenchidas com meta.metas do Power Automate.', { font: { b: 1, sz: 10, color: XL_COR.vermelho }, align: { h: 'left' } });
+      B.put(MH - 1, MC0, 'METAS DO MÊS — preencha as células amarelas (vazio = sem meta · taxa de ocupação em %).' + (VAZIO ? '' : ' Saem preenchidas com meta.metas do Power Automate.'), { font: { b: 1, sz: 10, color: XL_COR.vermelho }, align: { h: 'left' } });
       B.put(MH, MC0, 'Indicador', stHB); B.put(MH, MC1, 'Todos', stHB); B.cols[MC1] = 11; B.alt[MH] = 30;
       colsMetaBD.forEach((nm, j) => { B.put(MH, MC1 + 1 + j, nm, stHB); B.cols[MC1 + 1 + j] = 12; });
       const MROW = {};
@@ -4478,7 +4499,7 @@ $('out-tudo')?.addEventListener('click', () => {
             cat.push([nomeItem({ k, div: vei }), (ROTULO_DASH[k] || IND_CAT[k].curto) + ' por veículo', 1, posL(k), colInd(k), posL(vei), colInd(vei)]);
           });
           const CATN = CR0 + Math.max(1, cat.length) - 1;
-          cat.forEach((row, i) => row.forEach((v, j) => CF.put(CR0 + i, CAT0 + j, v, j === 0 ? { font: { b: 1, sz: 9 }, align: { h: 'left' } } : j < 3 ? { fill: XL_COR.entrada, font: { sz: 9, color: '0000FF' }, align: { h: j === 1 ? 'left' : 'center' }, unlocked: 1 } : { font: { sz: 8, color: '9A9A9A' } })));
+          cat.forEach((row, i) => row.forEach((v, j) => CF.put(CR0 + i, CAT0 + j, v, j === 0 ? { font: { b: 1, sz: 9 }, align: { h: 'left' } } : j < 3 ? { fill: XL_COR.entrada, font: { sz: 9, color: '0000FF' }, align: { h: j === 1 ? 'left' : 'center' } } : { font: { sz: 8, color: '9A9A9A' } })));
           const CATR = `Config!$${XL.colL(CAT0)}$${CR0}:$${XL.colL(CAT0 + 6)}$${CATN}`;
           const LISTA_IND = `Config!$${XL.colL(CAT0)}$${CR0}:$${XL.colL(CAT0)}$${CATN}`;
           // perfil por cliente
@@ -4490,7 +4511,7 @@ $('out-tudo')?.addEventListener('click', () => {
             const zebra = i % 2 ? 'F7F7F7' : 'FFFFFF';
             vals.forEach((v, j) => CF.put(rr, 1 + j, v || undefined, j === 0
               ? { fill: zebra, font: { b: 1, sz: 10 }, align: { h: 'left' }, border: { b: ['hair', 'BFBFBF'] } }
-              : { fill: XL_COR.entrada, font: { sz: 9, color: '0000FF' }, align: { h: 'left' }, border: { b: ['hair', 'BFBFBF'] }, unlocked: 1 }));
+              : { fill: XL_COR.entrada, font: { sz: 9, color: '0000FF' }, align: { h: 'left' }, border: { b: ['hair', 'BFBFBF'] } }));
           });
           const faixaC = j => `${XL.colL(j)}${CR0}:${XL.colL(j)}${CRN}`;
           [3, 4, 5, 7, 8, 9, 11, 12, 15, 16].forEach(j => CF.dv.push({ sqref: faixaC(j), lista: LISTA_IND, titulo: 'Indicador', msg: 'Escolha na lista (vazio = nada).', erro: 'Escolha um indicador da lista (catálogo à direita).' }));
@@ -4832,7 +4853,7 @@ $('out-tudo')?.addEventListener('click', () => {
         series: [sPerf(g, 'in', 'sem', XL_COR.barra), sPerf(g, 'out', 'sem', 'A6A6A6')] });
       X.charts.push({ r1: g3, c1: XE[0], r2: g3 + HG - 1, c2: XE[1], xml: semPerf(C1.TIT.xspal, 'A') });
       X.charts.push({ r1: g3, c1: XD[0], r2: g3 + HG - 1, c2: XD[1], xml: semPerf(C1.TIT.xston, 'B') });
-      X.caixa(g3 + HG, 2, g3 + HG, XU, `Cards: período digitado (dia inicial e final). Gráficos: mês do dia inicial. Absenteísmo (H/H) = faltas ÷ homem-dia (soma do efetivo diário) · Turnover = desligamentos ÷ efetivo · CAF/SAF = acidentes com / sem afastamento. Metas: aba BD. Fonte: Power Automate · IntraLog.`, { font: { i: 1, sz: 8, color: '9A9A9A' }, align: { h: 'left' } }, null);
+      X.caixa(g3 + HG, 2, g3 + HG, XU, `Cards: período digitado (dia inicial e final). Gráficos: mês do dia inicial. Absenteísmo (H/H) = faltas ÷ homem-dia (soma do efetivo diário) · Turnover = desligamentos ÷ efetivo · CAF/SAF = acidentes com / sem afastamento. Metas: aba BD.${VAZIO ? '' : ' Fonte: Power Automate · IntraLog.'}`, { font: { i: 1, sz: 8, color: '9A9A9A' }, align: { h: 'left' } }, null);
       X.areaImp = `$A$1:$${XL.colL(XU + 1)}$${g3 + HG}`;
       X.primeira = !UNI;
 
@@ -4929,7 +4950,7 @@ $('out-tudo')?.addEventListener('click', () => {
         A.caixa(r0, 1, r0 + keys.length - 1, 1, nm, { font: { b: 1, sz: 9 }, align: { wrap: 1 } });
         r = r0 + keys.length; A.alt[r] = 13.5; r++;
       });
-      A.put(r, 1, `Mês / ano: filtro na célula vermelha do canto superior direito. Célula vazia = sem registro. MÊS: soma nos fluxos e NC; último dado em ocupação e efetivo. Taxa = ocupadas ÷ disponíveis (contrato). Ocupação: verde ≥ ${Math.round(CFG.critico * 100)}% (alta, boa notícia), verde escuro > 100% (excede o contratado), amarelo ${Math.round(CFG.atencao * 100)}–${Math.round(CFG.critico * 100)}% (média), vermelho < ${Math.round(CFG.atencao * 100)}% (ociosidade). Incidente > 0 em vermelho. META: preenchida a partir de meta.metas do Power Automate, quando houver.`,
+      A.put(r, 1, `Mês / ano: filtro na célula vermelha do canto superior direito. Célula vazia = sem registro. MÊS: soma nos fluxos e NC; último dado em ocupação e efetivo. Taxa = ocupadas ÷ disponíveis (contrato). Ocupação: verde ≥ ${Math.round(CFG.critico * 100)}% (alta, boa notícia), verde escuro > 100% (excede o contratado), amarelo ${Math.round(CFG.atencao * 100)}–${Math.round(CFG.critico * 100)}% (média), vermelho < ${Math.round(CFG.atencao * 100)}% (ociosidade). Incidente > 0 em vermelho. META: ${VAZIO ? 'aba BD (tabela de metas).' : 'preenchida a partir de meta.metas do Power Automate, quando houver.'}`,
         { font: { i: 1, sz: 8, color: '7F7F7F' }, align: { h: 'left' } });
       A.areaImp = `$A$1:$${XL.colL(CM)}$${r}`;
 
@@ -5057,7 +5078,10 @@ $('out-tudo')?.addEventListener('click', () => {
       const extras = UNI ? montarConsolidado() : [];
       const CFG_ABA = PFX.CF;
       const abas = UNI ? [extras[0], X, A, Q, C1.K, B, CFG_ABA, C2.K, extras[1]] : [X, A, Q, C1.K, B, CFG_ABA, C2.K];
-      return XL.pasta(abas, E);
+      // proteção: só a BD fica livre; nas demais abas só os filtros (cliente, datas, mês) são editáveis
+      const SENHA = MODO === 'TPC' ? 'tpc' : 'jsl';
+      abas.forEach(a => { if (a !== B) a.senha = SENHA; });
+      return XL.pasta(abas, E, [], SENHA);
 
       function montarConsolidado() {
         const KD = new XL.Aba('calculos_consolidado', E);
