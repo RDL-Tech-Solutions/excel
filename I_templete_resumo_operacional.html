@@ -1756,7 +1756,7 @@
       const taxa = ocup === null ? null : (contrato ? ocup / contrato : taxaPlan);
       return { d, cli, contrato, tipo, ocup, taxa, taxaPlan, obs: String(campo(m, 'obs') || '').trim(), dep: depDe(m, '') };
     }
-    // Lista "gente" (JSL): DATA, CLIENTE, FALTA, FOLGA, FÉRIAS, DESLIGAMENTO, OBS (EFETIVO opcional)
+    // Lista "gente" (JSL): DATA, CLIENTE, FALTA, FOLGA, FÉRIAS, DESLIGAMENTO, EFETIVO_OP, OBS
     function normalizaGente(row) {
       if (!row || typeof row !== 'object') return null;
       const m = mapa(row);
@@ -2410,7 +2410,9 @@
         const rin = f(IDX.in.get(d) || []), rout = f(IDX.out.get(d) || []);
         const rocc = f(IDX.occ.get(d) || []), rinc = f(IDX.inc.get(d) || []);
         const fin = fluxoDia(rin), fout = fluxoDia(rout);
-        let efe = somaNula(rin, 'efe');
+        // efetivo: lista "gente" (JSL) primeiro; IN/OUT só como reserva (TPC traz no inbound)
+        let efe = somaNula(f(IDX.gen.get(d) || []), 'efe');
+        if (efe === null) efe = somaNula(rin, 'efe');
         if (efe === null) efe = somaNula(rout, 'efe');
         const incQ = rinc.reduce((a, x) => a + (x.qtd || 0), 0);
         const nc = incQ > 0 ? incQ : (fin || fout ? 0 : null);
@@ -2669,7 +2671,9 @@
       if (E) {
         let h = `<div class="big-line"><strong class="tnum" style="color:var(--staff)">${nInt(E.efe)}</strong><span>${E.efe === 1 ? 'pessoa' : 'pessoas'} na operação · média ${nf1.format(R.efeMed)} · pico ${nInt(R.efeMax)}</span></div>`;
         if (!cli) {
-          const rows = (IDX.in.get(E.d) || []).filter(r => ok(r.efe)).sort((a, b) => b.efe - a.efe);
+          const porCli = new Map();
+          (IDX.gen.get(E.d) || []).concat(IDX.in.get(E.d) || [], IDX.out.get(E.d) || []).forEach(r => { if (ok(r.efe) && !porCli.has(r.cli)) porCli.set(r.cli, r); });
+          const rows = [...porCli.values()].sort((a, b) => b.efe - a.efe);
           const mx = Math.max(1, ...rows.map(r => r.efe));
           h += `<ul class="mini-list">${rows.map(r => `<li><span>${esc(nomeCli(r.cli))}</span><div class="bar"><span style="width:${r.efe / mx * 100}%"></span></div><b>${nInt(r.efe)}</b></li>`).join('')}</ul>`;
         }
@@ -3913,7 +3917,7 @@ $('out-tudo')?.addEventListener('click', () => {
         return { vei: s('vei'), pal: s('pal'), ton: s('ton'), cx: sn('cx'), ped: sn('ped'), pfat: sn('pfat'), itn: sn('itn'), pec: sn('pec'), lnf: sn('lnf'), icm: sn('icm'), cxf: sn('cxf'), cxm: sn('cxm') };
       };
       const fin = fx(rin), fout = fx(rout);
-      let efe = somaNula(rin, 'efe'); if (efe === null) efe = somaNula(rout, 'efe'); if (efe === null) efe = somaNula(rgen, 'efe');
+      let efe = somaNula(rgen, 'efe'); if (efe === null) efe = somaNula(rin, 'efe'); if (efe === null) efe = somaNula(rout, 'efe');
       const incQ = rinc.reduce((a, x) => a + (x.qtd || 0), 0);
       const todos = rin.concat(rout, rgen);
       const o = rocc[0];
@@ -5503,9 +5507,9 @@ $('out-tudo')?.addEventListener('click', () => {
   Metas por cliente (coluna META do Excel): meta.metas.<CLIENTE> = { "in_veiculos": 150,
     "in_pallets", "in_toneladas", "in_caixas", "out_veiculos", "out_pedidos", "out_pallets",
     "out_toneladas", "out_caixas", "nc_max", "ocupacao": 85, "efetivo" }.
-  GENTE (JSL): lista "gente" com DATA, CLIENTE, FALTA, FOLGA, FÉRIAS, DESLIGAMENTO, OBS
+  GENTE (JSL): lista "gente" com DATA, CLIENTE, FALTA, FOLGA, FÉRIAS, DESLIGAMENTO, EFETIVO_OP, OBS
   (opcionais em gente/tpc/inbound: DESVIOS_COMPORTAMENTAIS, ACIDENTES_CAF, ACIDENTES_SAF)
-  (EFETIVO opcional; sem ele, o efetivo continua vindo de EFETIVO_OP do inbound/outbound).
+  (O efetivo da JSL vem de EFETIVO_OP da lista gente; inbound/outbound não trazem mais efetivo. TPC: coluna Efetivo da lista tpc.)
   DEPÓSITOS: inbound/outbound/ocupacao/gente = JSL. Lista "tpc" = depósito TPC, consolidada
   (uma linha por cliente × dia): Data, Cliente, Efetivo, Falta, Folga, Férias,
   Veículos Recebidos IN, Pallets Movimentados IN, Toneladas Movimentadas IN, Caixas Movimentadas IN,
