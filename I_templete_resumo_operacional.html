@@ -3528,6 +3528,16 @@ $('out-tudo')?.addEventListener('click', () => {
           const id = this.idx(this.xfs, xf);
           this.cache.set(k, id); return id;
         }
+        dxfFill(fill, fontColor) {
+          this.dxfs.push(`<dxf>${fontColor ? `<font><color rgb="FF${fontColor}"/></font>` : ''}<fill><patternFill><bgColor rgb="FF${fill}"/></patternFill></fill></dxf>`);
+          return this.dxfs.length - 1;
+        }
+        dxfFmt(code) {
+          // mesmo id da tabela de formatos da pasta (Excel lê o id; formatos internos 9 = 0% também valem)
+          const id = this.fmtId(code);
+          this.dxfs.push(`<dxf><numFmt numFmtId="${id}" formatCode="${xe(code)}"/></dxf>`);
+          return this.dxfs.length - 1;
+        }
         dxf(fontColor, fill, bold) {
           this.dxfs.push(`<dxf><font>${bold ? '<b/>' : ''}<color rgb="FF${fontColor}"/></font><fill><patternFill><bgColor rgb="FF${fill}"/></patternFill></fill></dxf>`);
           return this.dxfs.length - 1;
@@ -3973,7 +3983,7 @@ $('out-tudo')?.addEventListener('click', () => {
       const ORDEM = Object.keys(IND_CAT);
       const OBRIG = ['in_vei', 'in_pal', 'in_ton', 'out_vei', 'out_pal', 'out_ton'].concat(SET_COMUM);
       const uniao = listas => ORDEM.filter(k => listas.some(l => l.includes(k)));
-      const SET_MODO = MODO === 'JSL' ? SET_JSL : uniao(clis.map(setCli).concat([OBRIG]));
+      const SET_MODO = MODO === 'JSL' ? SET_JSL : MODO === 'TPC' ? SET_TPC : uniao(clis.map(setCli).concat([OBRIG, SET_TPC]));
       const IND_KEYS = MODO === 'TPC' ? SET_MODO : SET_JSL;
       const BASE_KEYS = SET_MODO.filter(k => IND_CAT[k].tipo !== 'taxa');
       const baseRows = [];
@@ -4049,11 +4059,49 @@ $('out-tudo')?.addEventListener('click', () => {
       instr.forEach(([t, h], i) => B.put(2 + i, IC, t, { font: { b: h ? 1 : 0, sz: h ? 10 : 9, color: h ? XL_COR.vermelho : '404040' }, align: { h: 'left', wrap: 1 } }));
 
       // listas globais (aba calculos) — meses do ano, clientes e depósitos
-      const listaCli = clis.map(nomeCli);
+      // ════ VAGAS DE CLIENTE: cadastro na aba Config (incluir / excluir cliente sem gerar o arquivo de novo) ════
+      const NV = Math.max(20, clis.length + 5);
+      const DEP_PAD = UNI ? (DEPOSITOS[0] || 'JSL') : MODO;
+      const SLOT = Array.from({ length: NV }, (_, j) => clis[j] ? { c: clis[j], nm: nomeCli(clis[j]), dep: depC(clis[j]) } : { c: null, nm: '', dep: '' });
+      const listaCli = SLOT.map(s => s.nm);                       // nome por vaga ('' = vaga livre)
       const depNome = Object.fromEntries(clis.map(c => [nomeCli(c), depC(c)]));
       const cliPorNome = Object.fromEntries(clis.map(c => [nomeCli(c), c]));
       const depCols = UNI ? depsExp.map(d => `Depósito ${d}`) : [];
-      const listaFiltro = ['Todos'].concat(depCols, listaCli);
+      const listaFiltro = ['Todos'].concat(depCols, clis.map(nomeCli));
+      const GERAL = ['Todos'].concat(depCols), NF = GERAL.length + NV;
+      const SET_NOVO = MODO === 'TPC' ? ['in_vei', 'in_pal', 'in_ton', 'out_vei', 'out_pal', 'out_ton'].concat(SET_COMUM) : SET_JSL;   // padrão de vaga livre
+      const setSlot = j => SLOT[j].c ? setCli(SLOT[j].c) : SET_NOVO;
+      // layout da Config (tabela 1: cadastro + cards; tabela 2: colunas da BD; textos; parâmetros; catálogo)
+      const CG0 = 9, CAD0 = CG0 + GERAL.length, CADN = CAD0 + NV - 1;
+      const CFN = j => `Config!$B$${CAD0 + j}`;
+      const CFDp = j => `IF(Config!$C$${CAD0 + j}="","${DEP_PAD}",Config!$C$${CAD0 + j})`;
+      const cabSlot = j => ({ f: `${CFN(j)}&""`, v: listaCli[j] });
+      const depSlot = j => ({ f: CFDp(j), v: SLOT[j].dep || DEP_PAD });
+      const MH2 = CADN + 5, MR0 = MH2 + 1, MRN = MR0 + NV - 1;
+      const appCel = (j, k) => `Config!$${XL.colL(4 + BASE_KEYS.indexOf(k))}$${MR0 + j}`;
+      const appF = (j, k) => IND_CAT[k].tipo === 'taxa' ? `AND(${appCel(j, 'occ_disp')}<>"Não",${appCel(j, 'occ_ocup')}<>"Não")` : `${appCel(j, k)}<>"Não"`;
+      const appJS = (j, k) => { const set = setSlot(j); return IND_CAT[k].tipo === 'taxa' ? set.includes('occ_disp') && set.includes('occ_ocup') : set.includes(k); };
+      const TXT_ITENS = [
+        ['card_in', 'Card IN · título', 'RECEBIMENTO (IN)'], ['in_big', 'Card IN · legenda do número', 'veículos recebidos'],
+        ['card_out', 'Card OUT · título', 'EXPEDIÇÃO (OUT)'], ['out_big', 'Card OUT · legenda do número', 'veículos expedidos'],
+        ['card_nc', 'Card NC · título', 'NC OPERACIONAL'], ['nc_big', 'Card NC · legenda do número', 'incidentes no período'],
+        ['nc_ns', 'Card NC · linha 1', 'NO SHOW'], ['nc_bkl', 'Card NC · linha 2', 'BACKLOG'],
+        ['card_occ', 'Card Ocupação · título', 'ÍNDICE DE OCUPAÇÃO (P.P)'], ['occ_cont', 'Card Ocupação · posições (cliente)', 'CONTRATADA'],
+        ['occ_arm', 'Card Ocupação · posições (Todos / depósito)', 'ARMAZÉM'], ['occ_ocup', 'Card Ocupação · ocupadas', 'OCUPADA'],
+        ['occ_tx', 'Card Ocupação · taxa', 'TX OCUPAÇÃO'], ['occ_oci', 'Card Ocupação · ociosidade', 'OCIOSIDADE'],
+        ['card_gen', 'Card Gente · título', 'GENTE'], ['gen_efe', 'Card Gente · linha 1', 'EFETIVO'], ['gen_abs', 'Card Gente · linha 2', 'ABSENTEÍSMO (H/H)'],
+        ['gen_fer', 'Card Gente · linha 3', 'FÉRIAS'], ['gen_turn', 'Card Gente · linha 4', 'TURNOVER'], ['gen_dsv', 'Card Gente · linha 5', 'DESVIOS COMPORTAM.'],
+        ['gen_aci', 'Card Gente · linha 6', 'ACIDENTES (CAF/SAF)'],
+        ['g_vei', 'Gráfico 1 · título', 'MOVIMENTAÇÃO VEÍCULO/DIA'], ['s_vin', 'Gráfico 1 · série IN', 'Recebidos (IN)'], ['s_vout', 'Gráfico 1 · série OUT', 'Expedidos (OUT)'],
+        ['g_occ', 'Gráfico ocupação · título', 'OCUPAÇÃO DIÁRIA'], ['g_occ_so', 'Gráfico ocupação · título (só ocupadas)', 'POSIÇÕES OCUPADAS/DIA'],
+        ['g_occ_na', 'Gráfico ocupação · título (não se aplica)', 'OCUPAÇÃO — NÃO SE APLICA'], ['s_ocup', 'Gráfico ocupação · série ocupada', 'Ocupada (p.p)'],
+        ['s_cont', 'Gráfico ocupação · linha (cliente)', 'Contratada (p.p)'], ['s_arm', 'Gráfico ocupação · linha (Todos / depósito)', 'Capacidade do armazém (p.p)']
+      ];
+      const TH = MRN + 5, T0 = TH + 1, TN = T0 + TXT_ITENS.length - 1;
+      const PH = TN + 5, P0 = PH + 1;                              // parâmetros: capacidade por depósito, faixas de ocupação
+      const CAP_CEL = d => `Config!$C$${P0 + depsExp.indexOf(d)}`;
+      const FX_AT = `Config!$C$${P0 + depsExp.length}`, FX_CR = `Config!$C$${P0 + depsExp.length + 1}`;
+      const CAT0 = Math.max(22, 4 + BASE_KEYS.length + 2);         // catálogo de indicadores (à direita)
       const capDep = VAZIO ? depsExp.map(d => { const v = (opts.cap && opts.cap[d]) || CAP_PADRAO[d] || 0; return [d, v, v ? 'informada' : '']; })
         : depsExp.map(d => [d, (CAP_DEP[d] && CAP_DEP[d].valor) || 0, (CAP_DEP[d] && CAP_DEP[d].fonte) || '']);
       const CAP_TOT = capDep.reduce((a, x) => a + x[1], 0);
@@ -4069,7 +4117,7 @@ $('out-tudo')?.addEventListener('click', () => {
       const stHB = { fill: XL_COR.tinta, font: { b: 1, sz: 9, color: 'FFFFFF' }, align: { wrap: 1 } };
       B.put(MH - 1, MC0, 'METAS DO MÊS — preencha as células amarelas (vazio = sem meta · taxa de ocupação em %).' + (VAZIO ? '' : ' Saem preenchidas com meta.metas do Power Automate.'), { font: { b: 1, sz: 10, color: XL_COR.vermelho }, align: { h: 'left' } });
       B.put(MH, MC0, 'Indicador', stHB); B.put(MH, MC1, 'Todos', stHB); B.cols[MC1] = 11; B.alt[MH] = 30;
-      colsMetaBD.forEach((nm, j) => { B.put(MH, MC1 + 1 + j, nm, stHB); B.cols[MC1 + 1 + j] = 12; });
+      colsMetaBD.forEach((nm, j) => { const js = j - depCols.length; B.put(MH, MC1 + 1 + j, js >= 0 ? cabSlot(js) : nm, stHB); B.cols[MC1 + 1 + j] = 12; });
       const MROW = {};
       META_KEYS.forEach((k, i) => {
         const rr = MH + 1 + i, ind = IND_CAT[k], fm = ind.tipo === 'taxa' ? '0%' : '#,##0';
@@ -4107,13 +4155,14 @@ $('out-tudo')?.addEventListener('click', () => {
         K.put(2, 2, { f: `IF(OR(${celFiltro}="",${celFiltro}="Todos"),"Todos",${celFiltro})`, v: nomeSel }, { font: { b: 1, sz: 10 }, align: { h: 'left' } });
         K.put(2, 3, { f: `IF(LEFT($B$2,9)="Depósito ",2,1)`, v: 1 }, { font: { sz: 9 } });
         K.put(2, 4, { f: `IF($C$2=2,MID($B$2,10,60),$B$2)`, v: nomeSel }, { font: { sz: 9 }, align: { h: 'left' } });
-        K.put(2, 5, { f: `IFERROR(INDEX(${cN(L_DEPX, 12)}:${cN(L_DEPX, 11 + listaFiltro.length)},MATCH($B$2,${cN(L_CLI, 12)}:${cN(L_CLI, 11 + listaFiltro.length)},0)),"")`, v: TD ? rotDep : depC(clienteInicial) }, { font: { sz: 9 }, align: { h: 'left' } });
+        K.put(2, 5, { f: `IFERROR(INDEX(${cN(L_DEPX, 12)}:${cN(L_DEPX, 11 + NF)},MATCH($B$2,${cN(L_CLI, 12)}:${cN(L_CLI, 11 + NF)},0)),"")`, v: TD ? rotDep : depC(clienteInicial) }, { font: { sz: 9 }, align: { h: 'left' } });
         K.put(3, 1, 'Capacidade (posições)', stL);
         K.put(3, 2, { f: `SUM(${cN(L_CAP + 1, 13)}:${cN(L_CAP + 1, 12 + capDep.length)})`, v: CAP_TOT }, { font: { b: 1, sz: 10 }, fmt: '#,##0', align: { h: 'left' } });
         K.put(3, 3, 'soma dos depósitos (tabela de capacidade à direita, células amarelas)', stNota);
         K.put(4, 1, 'Capacidade (repetida p/ fórmulas)', stNota); K.put(4, 2, { f: '$B$3', v: CAP_TOT }, { font: { sz: 9 }, fmt: '#,##0' });
-        K.put(5, 1, 'Faixa de atenção (ocupação)', stL); K.put(5, 2, CFG.atencao, Object.assign({ fmt: '0%' }, stIn));
-        K.put(6, 1, 'Faixa crítica (ocupação)', stL); K.put(6, 2, CFG.critico, Object.assign({ fmt: '0%' }, stIn));
+        K.put(5, 1, 'Faixa de atenção (ocupação)', stL); K.put(5, 2, { f: `N(${FX_AT})`, v: CFG.atencao }, { font: { sz: 10 }, fmt: '0%', align: { h: 'left' } });
+        K.put(6, 1, 'Faixa crítica (ocupação)', stL); K.put(6, 2, { f: `N(${FX_CR})`, v: CFG.critico }, { font: { sz: 10 }, fmt: '0%', align: { h: 'left' } });
+        K.put(5, 3, 'parâmetros na aba Config', stNota);
         const sIni = XL.serial(`${mk}-01`), sFim = XL.serial(`${mk}-${pad2(n)}`), sAnt = XL.serial(`${mkAnt}-01`);
         K.put(7, 1, 'Competência', stL);
         K.put(7, 3, { f: MESDATA(celMes, mk), v: sIni }, { font: { sz: 9 }, fmt: 'dd/mm/yyyy' });
@@ -4133,15 +4182,28 @@ $('out-tudo')?.addEventListener('click', () => {
         K.put(11, L_MES, 'Meses (filtros das abas)', stH);
         for (let m = 1; m <= 12; m++) K.put(11 + m, L_MES, `${MESES_UP[m - 1]} · ${ano}`, { font: { sz: 9 }, align: { h: 'left' } });
         K.put(11, L_CLI, 'Filtro: depósito / cliente', stH); K.put(11, L_DEPX, 'Depósito', stH);
-        listaFiltro.forEach((nm, i) => {
+        // Todos / depósitos (fixos) + clientes cadastrados na Config, sem as vagas livres (lista compacta)
+        GERAL.forEach((nm, i) => {
           K.put(12 + i, L_CLI, nm, { font: { sz: 9 }, align: { h: 'left' } });
-          K.put(12 + i, L_DEPX, nm === 'Todos' ? rotDep : nm.startsWith('Depósito ') ? nm.slice(9) : depNome[nm], { font: { sz: 9 } });
+          K.put(12 + i, L_DEPX, nm === 'Todos' ? rotDep : nm.slice(9), { font: { sz: 9 } });
         });
+        const LCNT = L_DEPX + 1, cntR = `${cN(LCNT, 12 + GERAL.length)}:${cN(LCNT, 11 + NF)}`, cadR = `Config!$B$${CAD0}:$B$${CADN}`, depR = `Config!$C$${CAD0}:$C$${CADN}`;
+        K.put(11, LCNT, 'Nº (vagas)', stH);
+        const cheios = SLOT.filter(sl => sl.nm);
+        for (let j = 0; j < NV; j++) {
+          const rr = 12 + GERAL.length + j, prev = j ? `${XL.colL(LCNT)}${rr - 1}` : '0';
+          K.put(rr, LCNT, { f: `IF(${CFN(j)}&""="",${prev},${prev}+1)`, v: SLOT.slice(0, j + 1).filter(sl => sl.nm).length }, { font: { sz: 8 } });
+          const nmC = `${XL.colL(L_CLI)}${rr}`, pos = `MATCH(${j + 1},${cntR},0)`;
+          K.put(rr, L_CLI, { f: `IFERROR(INDEX(${cadR},${pos})&"","")`, v: cheios[j] ? cheios[j].nm : '' }, { font: { sz: 9 }, align: { h: 'left' } });
+          K.put(rr, L_DEPX, { f: `IF(${nmC}="","",IF(INDEX(${depR},${pos})&""="","${DEP_PAD}",INDEX(${depR},${pos})&""))`, v: cheios[j] ? cheios[j].dep : '' }, { font: { sz: 9 } });
+        }
+        K.put(10, L_CLI, { f: `MAX(1,${cN(LCNT, 11 + NF)})`, v: Math.max(1, cheios.length) }, { font: { b: 1, sz: 8 } });
+        K.put(10, L_CLI - 1, 'clientes', { font: { sz: 8 } });
         K.put(12, L_CAP, 'Capacidade por depósito', stH); K.put(12, L_CAP + 1, 'Posições', stH);
         capDep.forEach(([d, v, fo], i) => {
           K.put(13 + i, L_CAP, d, { font: { b: 1, sz: 9 }, align: { h: 'left' } });
-          K.put(13 + i, L_CAP + 1, v, Object.assign({ fmt: '#,##0' }, stIn));
-          K.put(13 + i, L_CAP + 2, fo, stNota);
+          K.put(13 + i, L_CAP + 1, { f: `N(${CAP_CEL(d)})`, v }, { font: { sz: 10 }, fmt: '#,##0' });
+          K.put(13 + i, L_CAP + 2, 'aba Config', stNota);
         });
         K.cols[L_MES] = 20; K.cols[L_CLI] = 22; K.cols[L_DEPX] = 12; K.cols[L_TIT] = 52; K.cols[L_CAP] = 14; K.cols[L_CAP + 2] = 20;
         const CAP_SEL = `IFERROR(INDEX(${cN(L_CAP + 1, 13)}:${cN(L_CAP + 1, 12 + capDep.length)},MATCH($D$2,${cN(L_CAP, 13)}:${cN(L_CAP, 12 + capDep.length)},0)),"")`;
@@ -4163,7 +4225,7 @@ $('out-tudo')?.addEventListener('click', () => {
         HLP_KEYS.forEach((k, bi) => {
           const hr = HX + bi * 35, H = { hr, prev: hr + 32, dia: [], ant: [] }, col = BR(k);
           K.put(hr, 1, IND_CAT[k].nome, stH); K.put(hr, 2, 'Data', stH);
-          listaCli.forEach((nm, j) => K.put(hr, 3 + j, nm, stH));
+          listaCli.forEach((nm, j) => K.put(hr, 3 + j, cabSlot(j), stH));
           H.cab = `$C$${hr}:$${lastC}$${hr}`;
           for (let d = 1; d <= 31; d++) {
             const rr = hr + d, iso = `${mk}-${pad2(d)}`, linha = [];
@@ -4173,7 +4235,7 @@ $('out-tudo')?.addEventListener('click', () => {
               const cNm = `${XL.colL(3 + j)}$${hr}`, cr = `${BC},${cNm},${BD},">="&$C$7,${BD},"<="&$B${rr},${col},"<>"`;
               const v = d > n || d > ateDia ? '' : ultimoAte(nm, k, `${mk}-01`, iso);
               linha.push(v);
-              K.put(rr, 3 + j, { f: `IF(OR($B${rr}="",$A${rr}>$B$9),"",IF(COUNTIFS(${cr})=0,"",SUMIFS(${col},${BC},${cNm},${BD},_xlfn.MAXIFS(${BD},${cr}))))`, v }, { font: { sz: 8 }, fmt: '#,##0' });
+              K.put(rr, 3 + j, { f: `IF(OR($B${rr}="",$A${rr}>$B$9,${cNm}=""),"",IF(COUNTIFS(${cr})=0,"",SUMIFS(${col},${BC},${cNm},${BD},_xlfn.MAXIFS(${BD},${cr}))))`, v }, { font: { sz: 8 }, fmt: '#,##0' });
             });
             H.dia.push(linha);
           }
@@ -4182,10 +4244,10 @@ $('out-tudo')?.addEventListener('click', () => {
             const cNm = `${XL.colL(3 + j)}$${hr}`, cr = `${BC},${cNm},${BD},">="&$C$8,${BD},"<="&$D$8,${col},"<>"`;
             const v = ateDia ? ultimoAte(nm, k, antI, antF) : '';
             H.ant.push(v);
-            K.put(H.prev, 3 + j, { f: `IF(COUNTIFS(${cr})=0,"",SUMIFS(${col},${BC},${cNm},${BD},_xlfn.MAXIFS(${BD},${cr})))`, v }, { font: { b: 1, sz: 8 }, fmt: '#,##0' });
+            K.put(H.prev, 3 + j, { f: `IF(${cNm}="","",IF(COUNTIFS(${cr})=0,"",SUMIFS(${col},${BC},${cNm},${BD},_xlfn.MAXIFS(${BD},${cr}))))`, v }, { font: { b: 1, sz: 8 }, fmt: '#,##0' });
           });
           K.put(hr + 33, 1, 'Depósito', { font: { b: 1, sz: 8 }, align: { h: 'left' } });
-          listaCli.forEach((nm, j) => K.put(hr + 33, 3 + j, depNome[nm], { font: { sz: 8 } }));
+          listaCli.forEach((nm, j) => K.put(hr + 33, 3 + j, depSlot(j), { font: { sz: 8 } }));
           H.dep = `$C$${hr + 33}:$${lastC}$${hr + 33}`;
           H.linha = r => `$C$${r}:$${lastC}$${r}`;
           H.sel = vals => TD ? (numeros(vals).length ? soma(vals) : '') : (() => { const j = listaCli.indexOf(nomeSel); return j < 0 ? '' : vals[j]; })();
@@ -4313,10 +4375,10 @@ $('out-tudo')?.addEventListener('click', () => {
 
         // ---- por cliente × indicadores (mês inteiro, independe do filtro) ----
         K.put(PC - 1, 1, 'POR CLIENTE — mês inteiro (todos os clientes). Estoque = último valor do mês.', { font: { b: 1, sz: 10, color: XL_COR.vermelho }, align: { h: 'left' } });
-        const ordemCli = clis.map(c => ({ c, nm: nomeCli(c), dep: depC(c), tot: baseRows.filter(b => b.cli === c && b.d.startsWith(mk)).reduce((a, b) => a + (V(b, 'in_vei') || 0) + (V(b, 'out_vei') || 0), 0) }))
-          .sort((a, b) => a.dep.localeCompare(b.dep) || a.nm.localeCompare(b.nm, 'pt-BR'));   // ordem fixa: vale para qualquer mês
+        // uma coluna por vaga da Config (ordem do cadastro); vaga livre = coluna vazia
+        const ordemCli = SLOT.map((sl, j) => ({ c: sl.c, nm: sl.nm, dep: sl.dep || DEP_PAD, j }));
         K.put(PC, 1, 'Indicador', stH);
-        ordemCli.forEach((o, j) => K.put(PC, 2 + j, o.nm, stH));
+        ordemCli.forEach((o, j) => K.put(PC, 2 + j, cabSlot(j), stH));
         const PCT = 2 + ordemCli.length;
         K.put(PC, PCT, 'TOTAL', stH);
         K.alt[PC] = 30;
@@ -4327,25 +4389,26 @@ $('out-tudo')?.addEventListener('click', () => {
           K.put(rr, 1, `${GRUPOS_IND[ind.g].rot} · ${ind.nome}`, { font: { sz: 9 }, align: { h: 'left' } });
           PCv[i] = [];
           ordemCli.forEach((o, j) => {
-            const c = 2 + j, cc = `${XL.colL(c)}$${PC}`, rowsC = baseRows.filter(b => b.cli === o.c && b.d.startsWith(mk));
-            const noSet = setCli(o.c).includes(ind.k);
+            const c = 2 + j, cc = `${XL.colL(c)}$${PC}`, rowsC = o.c ? baseRows.filter(b => b.cli === o.c && b.d.startsWith(mk)) : [];
+            const noSet = appJS(j, ind.k);
             const st = { font: { sz: 9 }, fmt: ind.tipo === 'taxa' ? '0%' : ind.fmt };
             let f, v;
-            if (!noSet) { f = null; v = '—'; }
-            else if (ind.tipo === 'fluxo') { f = `SUMIFS(${BR(ind.k)},${BC},${cc},${critMes})`; v = somaInt(rowsC, ind.k); }
+            if (ind.tipo === 'fluxo') { f = `SUMIFS(${BR(ind.k)},${BC},${cc},${critMes})`; v = somaInt(rowsC, ind.k); }
             else if (ind.tipo === 'estoque' || ind.tipo === 'disp') {
               const kk = ind.tipo === 'disp' ? 'occ_ocup' : ind.k;
               f = `IF(COUNTIFS(${BC},${cc},${critMes},${BR(kk)},"<>")=0,"",SUMIFS(${BR(ind.k)},${BC},${cc},${BD},_xlfn.MAXIFS(${BD},${BC},${cc},${critMes},${BR(kk)},"<>")))`;
               const rs = rowsC.filter(b => ok(V(b, kk))), ref = rs.length ? rs[rs.length - 1] : null;
               v = ref ? (ok(V(ref, ind.k)) ? V(ref, ind.k) : 0) : '';
-              if (ind.tipo === 'disp' && ref && !ok(V(ref, 'occ_disp'))) { f = null; v = ref.modal || '—'; }
+              if (ind.tipo === 'disp') { f = `IF(N(${f})=0,"",${f})`; if (v === 0) v = ''; }
             } else {
               const ocR = `${XL.colL(c)}${PC + 1 + IX.occ_ocup}`, dpR = `${XL.colL(c)}${PC + 1 + IX.occ_disp}`;
               f = `IF(AND(ISNUMBER(${ocR}),ISNUMBER(${dpR})),IF(${dpR}>0,${ocR}/${dpR},""),"")`;
               const o2 = PCv[IX.occ_ocup][j], d2 = PCv[IX.occ_disp][j]; v = typeof o2 === 'number' && typeof d2 === 'number' && d2 > 0 ? o2 / d2 : '';
             }
+            // vaga livre = vazio · indicador que o cliente não usa (Config, tabela 2) = "—"
+            if (!o.c) v = ''; else if (!noSet) v = '—';
             PCv[i].push(v);
-            K.put(rr, c, f ? { f, v } : v, st);
+            K.put(rr, c, { f: `IF(${cc}="","",IF(${appF(j, ind.k)},${f},"—"))`, v }, st);
           });
           const fx = `B${rr}:${XL.colL(PCT - 1)}${rr}`;
           let f, v;
@@ -4395,13 +4458,13 @@ $('out-tudo')?.addEventListener('click', () => {
           PSTK.forEach(k => { cache[k] = { at: [], an: [] }; });
           listaCli.forEach((nm, i) => {
             const rr = PRB + 1 + i, cA = `$A${rr}`;
-            K.put(rr, 1, nm, { font: { sz: 8 }, align: { h: 'left' } }); K.put(rr, 2, depNome[nm], { font: { sz: 8 } });
+            K.put(rr, 1, cabSlot(i), { font: { sz: 8 }, align: { h: 'left' } }); K.put(rr, 2, depSlot(i), { font: { sz: 8 } });
             PSTK.forEach((k, j) => {
               [[3 + 2 * j, '$F$7', '$G$7', iDI, iDF, 'at'], [4 + 2 * j, '$F$8', '$G$8', iPI, iPF, 'an']].forEach(([c, a, z, i1, i2, w]) => {
                 const cr = `${BC},${cA},${BD},">="&${a},${BD},"<="&${z},${BR(k)},"<>"`;
                 const v = ultPer(nm, k, i1, i2);
                 cache[k][w].push(v);
-                K.put(rr, c, { f: `IF(COUNTIFS(${cr})=0,"",SUMIFS(${BR(k)},${BC},${cA},${BD},_xlfn.MAXIFS(${BD},${cr})))`, v }, { font: { sz: 8 }, fmt: '#,##0' });
+                K.put(rr, c, { f: `IF(${cA}="","",IF(COUNTIFS(${cr})=0,"",SUMIFS(${BR(k)},${BC},${cA},${BD},_xlfn.MAXIFS(${BD},${cr}))))`, v }, { font: { sz: 8 }, fmt: '#,##0' });
               });
             });
           });
@@ -4457,7 +4520,8 @@ $('out-tudo')?.addEventListener('click', () => {
         // (célula D3) decide o que aparece; tudo por fórmula, sem macro.
         function montarPerfil(P, LIN, PF0) {
           const nmCli = Object.fromEntries(clis.map(c => [nomeCli(c), c]));
-          const linhas = listaFiltro.map(nm => ({ nm, c: nmCli[nm] || null, pf: perfilDashboard(nmCli[nm] || null, IX) }));
+          const linhas = GERAL.map(nm => ({ nm, c: null, geral: true, pf: perfilDashboard(null, IX) }))
+            .concat(SLOT.map(sl => ({ nm: sl.nm, c: sl.c, dep: sl.dep, pf: perfilDashboard(sl.c, IX) })));
           const SLOTS = ['inA', 'inB', 'outA', 'outB'], NI = 4;          // calculos: 4 colunas por item (linha, rótulo, casas, linha do divisor)
           const posL = k => k ? LIN.indexOf(k) + 1 : 0;
           const colInd = k => k && IX[k] !== undefined ? IX[k] + 1 : 0;   // posição na faixa C:… da série diária
@@ -4475,115 +4539,132 @@ $('out-tudo')?.addEventListener('click', () => {
               occ: !tem('occ_ocup') ? 'Não se aplica' : (!tem('occ_disp') || !tem('occ_tx')) ? 'Só ocupadas' : 'Completo' };
           };
 
-          // ════ aba Config (visível): perfil por cliente com listas suspensas + catálogo de indicadores ════
+          // ════ aba Config (visível): um lugar só para manter clientes e o Dashboard ════
+          //  1 · CLIENTES (uma linha por cliente: nome, depósito, cards e gráficos)  ·  2 · COLUNAS DA BD por cliente
+          //  3 · TEXTOS do Dashboard  ·  4 · PARÂMETROS (capacidade, faixas)  ·  catálogo de indicadores (à direita)
           const CF = new XL.Aba('Config', E);
-          CF.tab = XL_COR.barra; CF.freeze = [5, 1];
-          const CR0 = 6, CRN = CR0 + listaFiltro.length - 1, CHR = 5;
-          const CCOLS = [['CLIENTE / FILTRO', 20], ['CARD IN', 13], ['IN · linha 1', 27], ['IN · linha 2 (a)', 27], ['IN · linha 2 (b)', 27],
-            ['CARD OUT', 13], ['OUT · linha 1', 27], ['OUT · linha 2 (a)', 27], ['OUT · linha 2 (b)', 27], ['CARD OCUPAÇÃO', 14],
+          CF.tab = XL_COR.barra; CF.freeze = [1, 4]; CF.zoom = 90;
+          const COLMAP = j => j === 1 ? 2 : j + 2;                        // colunas do perfil (1 = nome; 2..18 = cards/gráficos)
+          const CCOLS = [['Nº', 5], ['CLIENTE', 22], ['DEPÓSITO', 11], ['CARD IN', 12], ['IN · linha 1', 27], ['IN · linha 2 (a)', 27], ['IN · linha 2 (b)', 27],
+            ['CARD OUT', 12], ['OUT · linha 1', 27], ['OUT · linha 2 (a)', 27], ['OUT · linha 2 (b)', 27], ['CARD OCUPAÇÃO', 14],
             ['GRÁFICO 2 · IN', 27], ['GRÁFICO 2 · OUT', 27], ['GRÁFICO 2 · título diário', 34], ['GRÁFICO 2 · título semanal', 34],
             ['GRÁFICO 3 · IN', 27], ['GRÁFICO 3 · OUT', 27], ['GRÁFICO 3 · título diário', 34], ['GRÁFICO 3 · título semanal', 34]];
-          const CAT0 = CCOLS.length + 2;                                  // catálogo à direita
+          const NCC = CCOLS.length;
           const CATC = [['INDICADOR (nome da lista)', 32], ['Rótulo no card', 30], ['Casas decimais', 9], ['Linha no período', 9], ['Coluna na série', 9], ['Linha divisor', 9], ['Coluna divisor', 9]];
-          CF.alt[1] = 30; CF.alt[CHR] = 32;
-          CF.caixa(1, 1, 1, CAT0 + CATC.length - 1, 'CONFIG · O QUE CADA CLIENTE MOSTRA NO DASHBOARD', { fill: XL_COR.vermelho, font: { b: 1, sz: 14, color: 'FFFFFF' }, align: { h: 'left', indent: 1 } });
-          CF.caixa(2, 1, 3, CCOLS.length, 'Escolha nas listas (setinha da célula) os indicadores de cada cliente. Linha 1 = 1ª linha de apoio do card; linha 2 (a) e (b) = 2ª linha (juntas). "por veículo" = volume ÷ veículos. ' +
-            'CARD = "Não se aplica" esconde o card do cliente · Ocupação "Só ocupadas" mostra só as posições ocupadas (sem contratada e taxa). Vazio = nada. O Dashboard se atualiza na hora; não precisa gerar o arquivo de novo.',
-            { font: { sz: 9, color: '404040' }, align: { h: 'left', v: 'top', wrap: 1 } }, null);
-          CF.alt[2] = 18; CF.alt[3] = 18;
           const stHC = { fill: XL_COR.tinta, font: { b: 1, sz: 9, color: 'FFFFFF' }, align: { wrap: 1 } };
-          CCOLS.forEach(([t, w], i) => { CF.cols[1 + i] = w; CF.put(CHR, 1 + i, t, stHC); });
-          CF.cols[CCOLS.length + 1] = 3;
-          CATC.forEach(([t, w], i) => { CF.cols[CAT0 + i] = w; CF.put(CHR, CAT0 + i, t, i < 3 ? stHC : Object.assign({}, stHC, { fill: '7F7F7F' })); });
-          CF.put(CHR - 1, CAT0, 'CATÁLOGO DE INDICADORES — rótulo e casas podem ser editados; colunas cinza são técnicas (não alterar)', { font: { b: 1, sz: 9, color: XL_COR.vermelho }, align: { h: 'left' } });
-          // catálogo
+          const stEnt = { fill: XL_COR.entrada, font: { sz: 9, color: '0000FF' }, align: { h: 'left' }, border: { b: ['hair', 'BFBFBF'] } };
+          const stFixo = { fill: 'EDEDED', font: { b: 1, sz: 9, color: '404040' }, align: { h: 'left' }, border: { b: ['hair', 'BFBFBF'] } };
+          const secao = (rr, txt) => { CF.alt[rr] = 22; CF.caixa(rr, 1, rr, NCC, txt, { fill: XL_COR.vermelho, font: { b: 1, sz: 11, color: 'FFFFFF' }, align: { h: 'left', indent: 1 } }, null); };
+          CCOLS.forEach(([t, w], i) => { CF.cols[1 + i] = w; });
+          CF.alt[1] = 30;
+          CF.caixa(1, 1, 1, NCC, `CONFIG · CLIENTES E DASHBOARD (${UNI ? DEPOSITOS.join(' + ') : MODO})`, { fill: XL_COR.tinta, font: { b: 1, sz: 14, color: 'FFFFFF' }, align: { h: 'left', indent: 1 } });
+          const AJUDA = [
+            'COMO USAR — a aba é protegida: Revisão › Desproteger Planilha (mesma senha da pasta), faça o ajuste e proteja de novo. Células amarelas = editáveis. Tudo se atualiza na hora; não precisa gerar o arquivo de novo.',
+            'INCLUIR CLIENTE: (1) tabela 1 › escreva o nome numa vaga livre (coluna CLIENTE)' + (UNI ? ' e escolha o DEPÓSITO' : '') + '; (2) tabela 2 › marque Sim/Não nas colunas da BD que ele preenche; (3) tabela 1 › ajuste cards e gráficos (já vêm no padrão); (4) aba BD › preencha as metas na coluna dele.',
+            'EXCLUIR CLIENTE: apague o nome na tabela 1 (a vaga fica livre e o cliente some dos filtros, do Monitoramento e do Consol Mensal). As linhas antigas da BD continuam no histórico (somam em "Todos" nos meses em que existiram).',
+            'RENOMEAR: troque o nome na tabela 1 e, na BD, use Localizar e Substituir no nome antigo (Ctrl+L / Ctrl+H). O nome da BD precisa ser igual ao da tabela 1.'
+          ];
+          AJUDA.forEach((t, i) => { CF.alt[2 + i] = 30; CF.caixa(2 + i, 1, 2 + i, NCC, t, { fill: i ? 'FFFFFF' : 'FFF2CC', font: { b: i ? 0 : 1, sz: 9, color: '262626' }, align: { h: 'left', v: 'center', wrap: 1, indent: 1 } }, null); });
+
+          // ---- catálogo de indicadores (à direita) ----
           const cat = [];
           LIN.filter(k => /^(in|out)_/.test(k) && !/_vei$/.test(k)).forEach(k => {
             const vei = k.startsWith('in_') ? 'in_vei' : 'out_vei';
             cat.push([nomeItem({ k }), ROTULO_DASH[k] || IND_CAT[k].curto, decItem({ k }), posL(k), colInd(k), 0, 0]);
             cat.push([nomeItem({ k, div: vei }), (ROTULO_DASH[k] || IND_CAT[k].curto) + ' por veículo', 1, posL(k), colInd(k), posL(vei), colInd(vei)]);
           });
-          const CATN = CR0 + Math.max(1, cat.length) - 1;
-          cat.forEach((row, i) => row.forEach((v, j) => CF.put(CR0 + i, CAT0 + j, v, j === 0 ? { font: { b: 1, sz: 9 }, align: { h: 'left' } } : j < 3 ? { fill: XL_COR.entrada, font: { sz: 9, color: '0000FF' }, align: { h: j === 1 ? 'left' : 'center' } } : { font: { sz: 8, color: '9A9A9A' } })));
-          const CATR = `Config!$${XL.colL(CAT0)}$${CR0}:$${XL.colL(CAT0 + 6)}$${CATN}`;
-          const LISTA_IND = `Config!$${XL.colL(CAT0)}$${CR0}:$${XL.colL(CAT0)}$${CATN}`;
-          // perfil por cliente
-          linhas.forEach(({ nm, c, pf }, i) => {
-            const rr = CR0 + i, fl = flags(c);
-            const vals = [nm, fl.in, nomeItem(pf.inA[0]), nomeItem(pf.inB[0]), nomeItem(pf.inB[1]), fl.out, nomeItem(pf.outA[0]), nomeItem(pf.outB[0]), nomeItem(pf.outB[1]), fl.occ,
+          const CATN = CG0 + Math.max(1, cat.length) - 1;
+          CF.caixa(CG0 - 2, CAT0, CG0 - 2, CAT0 + CATC.length - 1, 'CATÁLOGO DE INDICADORES (listas da tabela 1) — rótulo e casas podem ser editados; colunas cinza são técnicas', { font: { b: 1, sz: 9, color: XL_COR.vermelho }, align: { h: 'left' } }, null);
+          CATC.forEach(([t, w], i) => { CF.cols[CAT0 + i] = w; CF.put(CG0 - 1, CAT0 + i, t, i < 3 ? stHC : Object.assign({}, stHC, { fill: '7F7F7F' })); });
+          CF.cols[CAT0 - 1] = 3;
+          cat.forEach((row, i) => row.forEach((v, j) => CF.put(CG0 + i, CAT0 + j, v, j === 0 ? { font: { b: 1, sz: 9 }, align: { h: 'left' } } : j < 3 ? Object.assign({}, stEnt, { align: { h: j === 1 ? 'left' : 'center' } }) : { font: { sz: 8, color: '9A9A9A' } })));
+          const CATR = `Config!$${XL.colL(CAT0)}$${CG0}:$${XL.colL(CAT0 + 6)}$${CATN}`;
+          const LISTA_IND = `Config!$${XL.colL(CAT0)}$${CG0}:$${XL.colL(CAT0)}$${CATN}`;
+
+          // ---- 1 · CLIENTES ----
+          secao(CG0 - 2, `1 · CLIENTES — ${NV} vagas · uma linha por cliente: nome, depósito, cards e gráficos do Dashboard (linhas cinza = visão geral, fixas)`);
+          CCOLS.forEach(([t], i) => CF.put(CG0 - 1, 1 + i, t, stHC));
+          CF.alt[CG0 - 1] = 32;
+          linhas.forEach(({ nm, c, pf, geral, dep }, i) => {
+            const rr = CG0 + i, fl = flags(c), js = i - GERAL.length;
+            const vals = [geral ? '—' : js + 1, nm, geral ? (nm.startsWith('Depósito ') ? nm.slice(9) : '') : (dep || (nm ? DEP_PAD : '')),
+              fl.in, nomeItem(pf.inA[0]), nomeItem(pf.inB[0]), nomeItem(pf.inB[1]), fl.out, nomeItem(pf.outA[0]), nomeItem(pf.outB[0]), nomeItem(pf.outB[1]), fl.occ,
               nomeItem(pf.chA.in && { k: pf.chA.in, div: pf.chA.inDiv }), nomeItem(pf.chA.out && { k: pf.chA.out, div: pf.chA.outDiv }), pf.chA.titD, pf.chA.titS,
               nomeItem(pf.chB.in && { k: pf.chB.in, div: pf.chB.inDiv }), nomeItem(pf.chB.out && { k: pf.chB.out, div: pf.chB.outDiv }), pf.chB.titD, pf.chB.titS];
-            const zebra = i % 2 ? 'F7F7F7' : 'FFFFFF';
-            vals.forEach((v, j) => CF.put(rr, 1 + j, v || undefined, j === 0
-              ? { fill: zebra, font: { b: 1, sz: 10 }, align: { h: 'left' }, border: { b: ['hair', 'BFBFBF'] } }
-              : { fill: XL_COR.entrada, font: { sz: 9, color: '0000FF' }, align: { h: 'left' }, border: { b: ['hair', 'BFBFBF'] } }));
+            vals.forEach((v, j) => CF.put(rr, 1 + j, v === '' || v === null ? undefined : v,
+              j === 0 ? Object.assign({}, stFixo, { align: { h: 'center' } }) : (geral && j <= 2) ? stFixo : j === 1 ? Object.assign({}, stEnt, { font: { b: 1, sz: 10, color: '0000FF' } }) : stEnt));
           });
-          const faixaC = j => `${XL.colL(j)}${CR0}:${XL.colL(j)}${CRN}`;
-          [3, 4, 5, 7, 8, 9, 11, 12, 15, 16].forEach(j => CF.dv.push({ sqref: faixaC(j), lista: LISTA_IND, titulo: 'Indicador', msg: 'Escolha na lista (vazio = nada).', erro: 'Escolha um indicador da lista (catálogo à direita).' }));
-          [2, 6].forEach(j => CF.dv.push({ sqref: faixaC(j), lista: '"Sim,Não se aplica"', titulo: 'Card', msg: 'Sim ou Não se aplica.' }));
-          CF.dv.push({ sqref: faixaC(10), lista: '"Completo,Só ocupadas,Não se aplica"', titulo: 'Card Ocupação', msg: 'Completo, Só ocupadas (sem contratada e taxa) ou Não se aplica.' });
-          const dxNA = E.dxf('9C0006', 'FFC7CE', true), dxSO = E.dxf('9C5700', 'FFEB9C', true);
+          const faixaC = j => `${XL.colL(j)}${CG0}:${XL.colL(j)}${CADN}`;
+          const faixaV = j => `${XL.colL(j)}${CAD0}:${XL.colL(j)}${CADN}`;     // só as vagas
+          CF.dv.push({ tipo: 'custom', sqref: faixaV(2), f1: `COUNTIF($B$${CG0}:$B$${CADN},B${CAD0})=1`, errTit: 'Nome repetido', erro: 'Este cliente já está cadastrado em outra vaga.', titulo: 'Cliente', msg: 'Nome igual ao usado na BD. Apague para liberar a vaga.' });
+          CF.dv.push({ sqref: faixaV(3), lista: `"${(UNI ? DEPOSITOS : [MODO]).join(',')}"`, titulo: 'Depósito', msg: UNI ? DEPOSITOS.join(' ou ') : MODO });
+          [3, 4, 5, 7, 8, 9, 11, 12, 15, 16].forEach(j => CF.dv.push({ sqref: faixaC(COLMAP(j)), lista: LISTA_IND, titulo: 'Indicador', msg: 'Escolha na lista (vazio = nada).', erro: 'Escolha um indicador da lista (catálogo à direita).' }));
+          [2, 6].forEach(j => CF.dv.push({ sqref: faixaC(COLMAP(j)), lista: '"Sim,Não se aplica"', titulo: 'Card', msg: 'Sim ou Não se aplica.' }));
+          CF.dv.push({ sqref: faixaC(COLMAP(10)), lista: '"Completo,Só ocupadas,Não se aplica"', titulo: 'Card Ocupação', msg: 'Completo, Só ocupadas (sem contratada e taxa) ou Não se aplica.' });
+          const dxNA = E.dxf('9C0006', 'FFC7CE', true), dxSO = E.dxf('9C5700', 'FFEB9C', true), dxLivre = E.dxf('BFBFBF', 'FAFAFA', false);
+          CF.cf.push({ sqref: `C${CAD0}:${XL.colL(NCC)}${CADN}`, dxf: dxLivre, stop: 1, f: `$B${CAD0}=""` });      // vaga livre: apagada
           [2, 6, 10].forEach(j => {
-            CF.cf.push({ sqref: faixaC(j), dxf: dxNA, f: `${XL.colL(j)}${CR0}="Não se aplica"` });
-            if (j === 10) CF.cf.push({ sqref: faixaC(j), dxf: dxSO, f: `${XL.colL(j)}${CR0}="Só ocupadas"` });
+            const L = XL.colL(COLMAP(j));
+            CF.cf.push({ sqref: faixaC(COLMAP(j)), dxf: dxNA, f: `${L}${CG0}="Não se aplica"` });
+            if (j === 10) CF.cf.push({ sqref: faixaC(COLMAP(j)), dxf: dxSO, f: `${L}${CG0}="Só ocupadas"` });
           });
-          // ---- TEXTOS DO DASHBOARD (renomear cards e gráficos) ----
-          const TXT_ITENS = [
-            ['card_in', 'Card IN · título', 'RECEBIMENTO (IN)'], ['in_big', 'Card IN · legenda do número', 'veículos recebidos'],
-            ['card_out', 'Card OUT · título', 'EXPEDIÇÃO (OUT)'], ['out_big', 'Card OUT · legenda do número', 'veículos expedidos'],
-            ['card_nc', 'Card NC · título', 'NC OPERACIONAL'], ['nc_big', 'Card NC · legenda do número', 'incidentes no período'],
-            ['nc_ns', 'Card NC · linha 1', 'NO SHOW'], ['nc_bkl', 'Card NC · linha 2', 'BACKLOG'],
-            ['card_occ', 'Card Ocupação · título', 'ÍNDICE DE OCUPAÇÃO (P.P)'], ['occ_cont', 'Card Ocupação · posições (cliente)', 'CONTRATADA'],
-            ['occ_arm', 'Card Ocupação · posições (Todos / depósito)', 'ARMAZÉM'], ['occ_ocup', 'Card Ocupação · ocupadas', 'OCUPADA'],
-            ['occ_tx', 'Card Ocupação · taxa', 'TX OCUPAÇÃO'], ['occ_oci', 'Card Ocupação · ociosidade', 'OCIOSIDADE'],
-            ['card_gen', 'Card Gente · título', 'GENTE'], ['gen_efe', 'Card Gente · linha 1', 'EFETIVO'], ['gen_abs', 'Card Gente · linha 2', 'ABSENTEÍSMO (H/H)'],
-            ['gen_fer', 'Card Gente · linha 3', 'FÉRIAS'], ['gen_turn', 'Card Gente · linha 4', 'TURNOVER'], ['gen_dsv', 'Card Gente · linha 5', 'DESVIOS COMPORTAM.'],
-            ['gen_aci', 'Card Gente · linha 6', 'ACIDENTES (CAF/SAF)'],
-            ['g_vei', 'Gráfico 1 · título', 'MOVIMENTAÇÃO VEÍCULO/DIA'], ['s_vin', 'Gráfico 1 · série IN', 'Recebidos (IN)'], ['s_vout', 'Gráfico 1 · série OUT', 'Expedidos (OUT)'],
-            ['g_occ', 'Gráfico ocupação · título', 'OCUPAÇÃO DIÁRIA'], ['g_occ_so', 'Gráfico ocupação · título (só ocupadas)', 'POSIÇÕES OCUPADAS/DIA'],
-            ['g_occ_na', 'Gráfico ocupação · título (não se aplica)', 'OCUPAÇÃO — NÃO SE APLICA'], ['s_ocup', 'Gráfico ocupação · série ocupada', 'Ocupada (p.p)'],
-            ['s_cont', 'Gráfico ocupação · linha (cliente)', 'Contratada (p.p)'], ['s_arm', 'Gráfico ocupação · linha (Todos / depósito)', 'Capacidade do armazém (p.p)']
-          ];
-          const TR0 = Math.max(CRN, CATN) + 4, TXT = {};
-          CF.caixa(TR0 - 2, 1, TR0 - 2, 5, 'TEXTOS DO DASHBOARD — renomeie cards e gráficos (títulos dos gráficos 2 e 3 ficam no perfil de cada cliente, acima)', { font: { b: 1, sz: 10, color: XL_COR.vermelho }, align: { h: 'left' } }, null);
-          CF.put(TR0 - 1, 1, 'Onde aparece', stHC); CF.caixa(TR0 - 1, 2, TR0 - 1, 5, 'Texto', stHC);
-          TXT_ITENS.forEach(([k, onde, txt], i) => {
-            const rr = TR0 + i;
-            CF.put(rr, 1, onde, { font: { sz: 9 }, align: { h: 'left' }, border: { b: ['hair', 'BFBFBF'] } });
-            CF.caixa(rr, 2, rr, 5, txt, { fill: XL_COR.entrada, font: { sz: 9, color: '0000FF' }, align: { h: 'left' }, border: { b: ['hair', 'BFBFBF'] } }, null);
-            TXT[k] = { ref: `Config!$B$${rr}`, v: txt };
+
+          // ---- 2 · COLUNAS DA BD POR CLIENTE ----
+          secao(MH2 - 1, '2 · COLUNAS DA BD — Sim = o cliente preenche · Não = coluna bloqueada na BD (cinza) e indicador fora do Monitoramento/Consol Mensal');
+          CF.put(MH2, 1, 'Nº', stHC); CF.put(MH2, 2, 'CLIENTE (da tabela 1)', stHC); CF.put(MH2, 3, 'DEPÓSITO', stHC); CF.alt[MH2] = 44;
+          BASE_KEYS.forEach((k, j) => CF.put(MH2, 4 + j, IND_CAT[k].base, Object.assign({}, stHC, { fill: GRUPOS_IND[IND_CAT[k].g].cor, font: { b: 1, sz: 8, color: XL_COR.tinta } })));
+          SLOT.forEach((sl, j) => {
+            const rr = MR0 + j, set = setSlot(j);
+            CF.put(rr, 1, j + 1, Object.assign({}, stFixo, { align: { h: 'center' } }));
+            CF.put(rr, 2, { f: `${CFN(j)}&""`, v: sl.nm }, stFixo);
+            CF.put(rr, 3, { f: `IF(${CFN(j)}&""="","",${CFDp(j)})`, v: sl.nm ? (sl.dep || DEP_PAD) : '' }, stFixo);
+            BASE_KEYS.forEach((k, i) => CF.put(rr, 4 + i, set.includes(k) ? 'Sim' : 'Não', Object.assign({}, stEnt, { align: { h: 'center' } })));
           });
-          CF.cols[1] = 34;
-          // ---- COLUNAS DA BD POR CLIENTE (Não = coluna bloqueada na BD para o cliente) ----
-          const MR0 = TR0 + TXT_ITENS.length + 4, MRN = MR0 + Math.max(1, listaCli.length) - 1;
-          CF.caixa(MR0 - 2, 1, MR0 - 2, 12, 'COLUNAS DA BD POR CLIENTE — "Não" bloqueia a coluna na BD para o cliente (fica cinza e não aceita valor). Baseado no monitoramento de cada cliente.', { font: { b: 1, sz: 10, color: XL_COR.vermelho }, align: { h: 'left' } }, null);
-          CF.put(MR0 - 1, 1, 'CLIENTE', stHC); CF.alt[MR0 - 1] = 44;
-          BASE_KEYS.forEach((k, j) => CF.put(MR0 - 1, 2 + j, IND_CAT[k].base, Object.assign({}, stHC, { fill: GRUPOS_IND[IND_CAT[k].g].cor, font: { b: 1, sz: 8, color: XL_COR.tinta } })));
-          listaCli.forEach((nm, i) => {
-            const rr = MR0 + i, set = setCli(cliPorNome[nm]);
-            CF.put(rr, 1, nm, { font: { b: 1, sz: 9 }, align: { h: 'left' }, border: { b: ['hair', 'BFBFBF'] } });
-            BASE_KEYS.forEach((k, j) => CF.put(rr, 2 + j, set.includes(k) ? 'Sim' : 'Não', { fill: XL_COR.entrada, font: { sz: 9, color: '0000FF' }, border: { b: ['hair', 'BFBFBF'] } }));
-          });
-          const mzL = XL.colL(1 + BASE_KEYS.length);
-          CF.dv.push({ sqref: `B${MR0}:${mzL}${MRN}`, lista: '"Sim,Não"', titulo: 'Coluna na BD', msg: 'Sim = o cliente preenche · Não = coluna bloqueada para o cliente.' });
-          CF.cf.push({ sqref: `B${MR0}:${mzL}${MRN}`, dxf: dxNA, f: `B${MR0}="Não"` });
+          const mzL = XL.colL(3 + BASE_KEYS.length);
+          CF.dv.push({ sqref: `D${MR0}:${mzL}${MRN}`, lista: '"Sim,Não"', titulo: 'Coluna na BD', msg: 'Sim = o cliente preenche · Não = coluna bloqueada para o cliente.' });
+          CF.cf.push({ sqref: `D${MR0}:${mzL}${MRN}`, dxf: dxLivre, stop: 1, f: `$B${MR0}=""` });
+          CF.cf.push({ sqref: `D${MR0}:${mzL}${MRN}`, dxf: dxNA, f: `D${MR0}="Não"` });
           // BD: bloqueia (validação) e acinzenta as colunas que não se aplicam ao cliente da linha
           const dxBloq = E.dxf('A6A6A6', 'D9D9D9', false);
           BASE_KEYS.forEach((k, j) => {
-            const mc = XL.colL(2 + j), L = XL.colL(BI[k]), r0 = BASE_R0;
-            const aplica = `IFERROR(INDEX(Config!$${mc}$${MR0}:$${mc}$${MRN},MATCH($B${r0},Config!$A$${MR0}:$A$${MRN},0)),"Sim")`;
+            const mc = XL.colL(4 + j), L = XL.colL(BI[k]), r0 = BASE_R0;
+            const aplica = `IFERROR(INDEX(Config!$${mc}$${MR0}:$${mc}$${MRN},MATCH($B${r0},Config!$B$${MR0}:$B$${MRN},0)),"Sim")`;
             B.dv.push({ tipo: 'custom', sqref: `${L}${r0}:${L}${BASE_RN}`, f1: `AND(${aplica}<>"Não",ISNUMBER(${L}${r0}),${L}${r0}>=0)`,
-              errTit: 'Não se aplica / valor inválido', erro: 'Esta coluna não se aplica a este cliente (aba Config) ou o valor é inválido. Use 0 ou um número maior.' });
+              errTit: 'Não se aplica / valor inválido', erro: 'Esta coluna não se aplica a este cliente (aba Config, tabela 2) ou o valor é inválido. Use 0 ou um número maior.' });
             B.cf.push({ sqref: `${L}${r0}:${L}${BASE_RN}`, dxf: dxBloq, f: `${aplica}="Não"` });
           });
-          CF.areaImp = `$A$1:$${XL.colL(CCOLS.length)}$${MRN}`; CF.paisagem = true;
+
+          // ---- 3 · TEXTOS DO DASHBOARD ----
+          secao(TH - 1, '3 · TEXTOS DO DASHBOARD — renomeie cards, linhas e gráficos (títulos dos gráficos 2 e 3 de cada cliente ficam na tabela 1)');
+          CF.caixa(TH, 1, TH, 3, 'Onde aparece', stHC); CF.caixa(TH, 4, TH, 7, 'Texto', stHC);
+          const TXT = {};
+          TXT_ITENS.forEach(([k, onde, txt], i) => {
+            const rr = T0 + i;
+            CF.caixa(rr, 1, rr, 3, onde, stFixo);
+            CF.caixa(rr, 4, rr, 7, txt, stEnt);
+            TXT[k] = { ref: `Config!$D$${rr}`, v: txt };
+          });
+
+          // ---- 4 · PARÂMETROS ----
+          secao(PH - 1, '4 · PARÂMETROS — capacidade do armazém (posições) e faixas da taxa de ocupação');
+          CF.caixa(PH, 1, PH, 2, 'Parâmetro', stHC); CF.put(PH, 3, 'Valor', stHC);
+          depsExp.forEach((d, i) => {
+            CF.caixa(P0 + i, 1, P0 + i, 2, `Capacidade do armazém ${d} (posições)`, stFixo);
+            CF.put(P0 + i, 3, (capDep.find(x => x[0] === d) || [0, 0])[1] || undefined, Object.assign({}, stEnt, { fmt: '#,##0', align: { h: 'right' } }));
+          });
+          CF.caixa(P0 + depsExp.length, 1, P0 + depsExp.length, 2, 'Ocupação · faixa de atenção (amarelo a partir de)', stFixo);
+          CF.put(P0 + depsExp.length, 3, CFG.atencao, Object.assign({}, stEnt, { fmt: '0%', align: { h: 'right' } }));
+          CF.caixa(P0 + depsExp.length + 1, 1, P0 + depsExp.length + 1, 2, 'Ocupação · faixa alta (verde a partir de)', stFixo);
+          CF.put(P0 + depsExp.length + 1, 3, CFG.critico, Object.assign({}, stEnt, { fmt: '0%', align: { h: 'right' } }));
+          CF.dv.push({ tipo: 'decimal', sqref: `C${P0}:C${P0 + depsExp.length + 1}`, f1: '0', erro: 'Use 0 ou um número maior.' });
+          CF.areaImp = `$A$1:$${XL.colL(NCC)}$${P0 + depsExp.length + 1}`; CF.paisagem = true;
 
           // ════ calculos: linha da seleção (lê a Config pelo filtro do Dashboard) ════
-          const SR = PF0 - 1, iSel = Math.max(0, listaFiltro.indexOf(nomeSel)), pfSel = linhas[iSel].pf, flSel = flags(linhas[iSel].c);
+          const SR = PF0 - 1, iSel = Math.max(0, linhas.findIndex(l => l.nm === nomeSel)), pfSel = linhas[iSel].pf, flSel = flags(linhas[iSel].c);
           K.put(PF0 - 2, 1, 'PERFIL DO CLIENTE FILTRADO — lido da aba Config (linha da Config · por item: linha no período, rótulo, casas, linha do divisor · gráficos: colunas da série)', { font: { b: 1, sz: 10, color: XL_COR.vermelho }, align: { h: 'left' } });
-          K.put(SR, 1, { f: `IFERROR(MATCH($B$2,Config!$A$${CR0}:$A$${CRN},0),1)`, v: iSel + 1 }, { font: { b: 1, sz: 8 }, fmt: '0' });
+          K.put(SR, 1, { f: `IFERROR(MATCH($B$2,Config!$B$${CG0}:$B$${CADN},0),1)`, v: iSel + 1 }, { font: { b: 1, sz: 8 }, fmt: '0' });
           const cel = c => `$${XL.colL(c)}$${SR}`;
-          const nmC = j => `INDEX(Config!$${XL.colL(j)}$${CR0}:$${XL.colL(j)}$${CRN},$A$${SR})`;
+          const nmC = j => { const L = XL.colL(COLMAP(j)); return `INDEX(Config!$${L}$${CG0}:$${L}$${CADN},$A$${SR})`; };
           const vk = (nm, col) => `IFERROR(VLOOKUP(${nm},${CATR},${col},0),0)`;
           const stS = { font: { b: 1, sz: 8 }, fill: XL_COR.entrada, align: { h: 'left' } };
           const MAPA_SLOT = { inA: [3, null], inB: [4, 5], outA: [7, null], outB: [8, 9] };
@@ -4708,10 +4789,10 @@ $('out-tudo')?.addEventListener('click', () => {
           const vis = [];
           ordemCli.forEach((o, i) => {
             const rr = VB + 1 + i;
-            K.put(rr, 1, o.nm, { font: { sz: 8 }, align: { h: 'left' } }); K.put(rr, 2, o.dep, { font: { sz: 8 } });
-            const entra = TD || o.nm === nomeSel;
+            K.put(rr, 1, cabSlot(i), { font: { sz: 8 }, align: { h: 'left' } }); K.put(rr, 2, depSlot(i), { font: { sz: 8 } });
+            const entra = !!o.nm && (TD || o.nm === nomeSel);
             if (entra) vis.push(o);
-            K.put(rr, 3, { f: `IF(OR($B$2="Todos",AND($C$2=2,$B${rr}=$D$2),AND($C$2=1,$A${rr}=$D$2)),1,0)`, v: entra ? 1 : 0 }, { font: { sz: 8 } });
+            K.put(rr, 3, { f: `IF($A${rr}="",0,IF(OR($B$2="Todos",AND($C$2=2,$B${rr}=$D$2),AND($C$2=1,$A${rr}=$D$2)),1,0))`, v: entra ? 1 : 0 }, { font: { sz: 8 } });
             K.put(rr, 4, { f: `IF($C${rr}=1,SUM($C$${r1}:$C${rr}),"")`, v: entra ? vis.length : '' }, { font: { sz: 8 } });
           });
           const slots = [];
@@ -4726,12 +4807,12 @@ $('out-tudo')?.addEventListener('click', () => {
           const MB = VB + Math.max(1, N) + 3, lastM = XL.colL(2 + Math.max(1, listaCli.length));
           K.put(MB - 1, 1, 'INDICADORES MEDIDOS POR CLIENTE (1 = mede) — o quadro mostra "—" quando o cliente filtrado não mede', { font: { b: 1, sz: 10, color: XL_COR.vermelho }, align: { h: 'left' } });
           K.put(MB, 1, 'Indicador', stH); K.put(MB, 2, 'Mede (seleção)', stH);
-          listaCli.forEach((nm, j) => K.put(MB, 3 + j, nm, stH));
+          listaCli.forEach((nm, j) => K.put(MB, 3 + j, cabSlot(j), stH));
           const mede = {};
           IND.forEach((ind, i) => {
             const rr = MB + 1 + i;
             K.put(rr, 1, `${GRUPOS_IND[ind.g].rot} · ${ind.nome}`, { font: { sz: 8 }, align: { h: 'left' } });
-            listaCli.forEach((nm, j) => K.put(rr, 3 + j, setCli(cliPorNome[nm]).includes(ind.k) ? 1 : 0, { font: { sz: 8 } }));
+            listaCli.forEach((nm, j) => K.put(rr, 3 + j, { f: `IF(${appF(j, ind.k)},1,0)`, v: appJS(j, ind.k) ? 1 : 0 }, { font: { sz: 8 } }));
             const v = TD ? 1 : (cliPorNome[nomeSel] && setCli(cliPorNome[nomeSel]).includes(ind.k) ? 1 : 0);
             K.put(rr, 2, { f: `IF(OR($B$2="Todos",$C$2=2),1,IFERROR(INDEX($C$${rr}:$${lastM}$${rr},MATCH($D$2,$C$${MB}:$${lastM}$${MB},0)),1))`, v }, { font: { b: 1, sz: 8 } });
             mede[ind.k] = { ref: `${nomeAba}!$B$${rr}`, v };
@@ -4742,8 +4823,10 @@ $('out-tudo')?.addEventListener('click', () => {
       const C1 = montarCalc('calculos', 'Dashboard!$Q$3', true, 'Dashboard!$D$3');
       const C2 = montarCalc('calculos_quadro', "'Consol Mensal'!$V$1", false, "'Consol Mensal'!$D$3");
       const LISTA_MES = `calculos!$${XL.colL(L_MES)}$12:$${XL.colL(L_MES)}$23`;
-      const LISTA_FILTRO = `calculos!$${XL.colL(L_CLI)}$12:$${XL.colL(L_CLI)}$${11 + listaFiltro.length}`;
-      const LISTA_CLIS = `calculos!$${XL.colL(L_CLI)}$${12 + 1 + depCols.length}:$${XL.colL(L_CLI)}$${11 + listaFiltro.length}`;
+      // listas dinâmicas: crescem/encolhem com o cadastro de clientes da Config (sem vagas livres)
+      const LCL = XL.colL(L_CLI);
+      const LISTA_FILTRO = `OFFSET(calculos!$${LCL}$12,0,0,${GERAL.length}+calculos!$${LCL}$10,1)`;
+      const LISTA_CLIS = `OFFSET(calculos!$${LCL}$${12 + GERAL.length},0,0,calculos!$${LCL}$10,1)`;
       B.dv[1].lista = LISTA_CLIS;
       const valMes = rotSel(mk);
       const dxF = cor => { E.dxfs.push(`<dxf><font><b/><color rgb="FF${cor}"/></font></dxf>`); return E.dxfs.length - 1; };
@@ -4936,100 +5019,120 @@ $('out-tudo')?.addEventListener('click', () => {
       X.areaImp = `$A$1:$${XL.colL(XU + 1)}$${g3 + HG}`;
       X.primeira = !UNI;
 
-      // ═══════════ MONITORAMENTO (dia a dia por cliente, por fórmula) ═══════════
+      // ═══════════ MONITORAMENTO (um cliente por vez: cliente e mês no topo; linhas = indicadores que o cliente usa) ═══════════
       const A = new XL.Aba('Monitoramento', E);
       A.tab = XL_COR.vermelho;
       const C0 = 6, CL = C0 + 30, CM = CL + 1;
       Object.assign(A.cols, { 1: 13, 2: 17.3, 3: 24, 4: 8, 5: 1.6 });
       for (let c = C0; c <= CL; c++) A.cols[c] = 6.3;
       A.cols[CM] = 9.5;
-      A.alt[1] = 34.5; A.alt[2] = 19.5; A.alt[3] = 13.5; A.alt[4] = 5.25;
-      A.freeze = [5, C0];
+      A.alt[1] = 34.5; A.alt[2] = 24; A.alt[3] = 6; A.alt[4] = 19.5; A.alt[5] = 13.5; A.alt[6] = 5.25;
+      const R0 = 7;
+      A.freeze = [R0, C0];
       for (let c = 1; c <= C0; c++) A.put(1, c, undefined, { fill: CINZA_LOGO, border: { b: DMED } });
       A.caixa(1, C0 + 1, 1, CM - 7, `MONITORAMENTO DIÁRIO DE PERFORMANCE${UNI || MODO === 'TPC' ? ' · ' + rotDep : ''}`, { fill: XL_COR.vermelho, font: { b: 1, sz: 14, color: 'FFFFFF' }, border: { b: DMED } }, null);
       seletorMes(A, 1, CM - 6, CM);
       A.imgs.push({ src: LOGO, r: 1, c: 1, dx: 8, dy: 5, w: 121, h: 34 });
-      A.caixa(2, 1, 3, 1, 'CLIENTE', { font: { b: 1, sz: 10 } });
-      A.caixa(2, 2, 3, 3, 'INDICADORES', { fill: XL_COR.cab, font: { b: 1, sz: 10 } });
-      A.caixa(2, 4, 3, 4, 'META', { fill: XL_COR.cab, font: { b: 1, sz: 10 } });
-      A.caixa(2, C0, 2, CL, 'REALIZADO P/DIA', { fill: XL_COR.cabDia, font: { b: 1, sz: 11 } });
-      A.caixa(2, CM, 3, CM, 'MÊS', { fill: XL_COR.cabDia, font: { b: 1, sz: 10 } });
+      // filtro de cliente
+      const cliMon = (SLOT.find(sl => sl.c === clienteInicial) || SLOT.find(sl => sl.c) || { c: null, nm: '' });
+      const jMon = Math.max(0, SLOT.indexOf(cliMon));
+      A.caixa(2, 1, 2, 2, 'CLIENTE  ▸', { font: { b: 1, sz: 12, color: XL_COR.tinta }, align: { h: 'right', indent: 1 } }, null);
+      A.caixa(2, 3, 2, 4, cliMon.nm, { fill: XL_COR.entrada, font: { b: 1, sz: 12 }, unlocked: 1 }, ['medium', XL_COR.barra]);
+      A.dv.push({ sqref: 'C2', lista: LISTA_CLIS, titulo: 'Cliente', msg: 'Escolha o cliente. As linhas mostram só os indicadores que ele usa (Config, tabela 2).' });
+      A.caixa(2, C0, 2, CM, 'Escolha o cliente (célula amarela) e o mês (célula vermelha). Linhas = indicadores que o cliente usa, conforme a aba Config.', { font: { i: 1, sz: 9, color: '7F7F7F' }, align: { h: 'left', indent: 1 } }, null);
+      const CLI = '$C$2';
+      A.caixa(4, 1, 5, 1, 'CLIENTE', { font: { b: 1, sz: 10 } });
+      A.caixa(4, 2, 5, 3, 'INDICADORES', { fill: XL_COR.cab, font: { b: 1, sz: 10 } });
+      A.caixa(4, 4, 5, 4, 'META', { fill: XL_COR.cab, font: { b: 1, sz: 10 } });
+      A.caixa(4, C0, 4, CL, 'REALIZADO P/DIA', { fill: XL_COR.cabDia, font: { b: 1, sz: 11 } });
+      A.caixa(4, CM, 5, CM, 'MÊS', { fill: XL_COR.cabDia, font: { b: 1, sz: 10 } });
       const celMesA = `$${XL.colL(CM - 6)}$1`;
       for (let d = 1; d <= 31; d++) {
-        const c = C0 + d - 1, iso = `${mk}-${pad2(d)}`, L = XL.colL(c), Lp = XL.colL(c - 1);
-        const f = d === 1 ? MESDATA(celMesA, mk) : `IF(${Lp}3="","",IF(MONTH(${Lp}3+1)=MONTH($${XL.colL(C0)}$3),${Lp}3+1,""))`;
-        A.put(3, c, { f, v: d <= n ? XL.serial(iso) : '' }, { fill: XL_COR.dia, font: { sz: 10 }, fmt: '[$-416]d;@', border: { l: d === 1 ? DMED : DOT, r: d === 31 ? DMED : DOT, t: DMED, b: DMED } });
+        const c = C0 + d - 1, iso = `${mk}-${pad2(d)}`, Lp = XL.colL(c - 1);
+        const f = d === 1 ? MESDATA(celMesA, mk) : `IF(${Lp}5="","",IF(MONTH(${Lp}5+1)=MONTH($${XL.colL(C0)}$5),${Lp}5+1,""))`;
+        A.put(5, c, { f, v: d <= n ? XL.serial(iso) : '' }, { fill: XL_COR.dia, font: { sz: 10 }, fmt: '[$-416]d;@', border: { l: d === 1 ? DMED : DOT, r: d === 31 ? DMED : DOT, t: DMED, b: DMED } });
       }
       const dxFds = E.dxf('1B1B1F', 'D9D9D9', true);
-      A.cf.push({ sqref: `${XL.colL(C0)}3:${XL.colL(CL)}3`, dxf: dxFds, f: `AND(ISNUMBER(${XL.colL(C0)}3),WEEKDAY(${XL.colL(C0)}3,2)>5)` });
+      A.cf.push({ sqref: `${XL.colL(C0)}5:${XL.colL(CL)}5`, dxf: dxFds, f: `AND(ISNUMBER(${XL.colL(C0)}5),WEEKDAY(${XL.colL(C0)}5,2)>5)` });
       const dxNC = E.dxf('9C0006', 'FFC7CE', true), dxExc = E.dxf('FFFFFF', '1F6F43', true), dxAlta = E.dxf('1F5F3A', 'C6EFCE', true),
         dxAten = E.dxf('9C5700', 'FFEB9C', true), dxBaixa = E.dxf('9C0006', 'FFC7CE', false);
       const valMesCli = (c, k, d) => { const iso = `${mk}-${pad2(d)}`; const b = baseRows.find(x => x.cli === c && x.d === iso); return b && ok(b.vals[k]) ? b.vals[k] : ''; };
-      let r = 5, depAtual = null;
-      clis.forEach(cli => {
-        if (UNI && depC(cli) !== depAtual) {
-          depAtual = depC(cli);
-          A.alt[r] = 20;
-          A.caixa(r, 1, r, CM, `DEPÓSITO ${depAtual}`, { fill: XL_COR.tinta, font: { b: 1, sz: 12, color: 'FFFFFF' }, align: { h: 'left', indent: 1 } });
-          r++; A.alt[r] = 5.25; r++;
-        }
-        const keys = setCli(cli), r0 = r, nm = nomeCli(cli);
-        const rowOf = {}; keys.forEach((k, i) => { rowOf[k] = r0 + i; });
-        const cliRef = `$A$${r0}`;
-        const grupos = [];
-        keys.forEach((k, i) => { const g = grupos[grupos.length - 1], gg = IND_CAT[k].g; if (g && g.g === gg) g.fim = r0 + i; else grupos.push({ g: gg, ini: r0 + i, fim: r0 + i }); });
-        const modal = (baseRows.filter(b => b.cli === cli && b.modal).pop() || {}).modal || '';
-        keys.forEach((k, i) => {
-          const rr = r0 + i, ind = IND_CAT[k], cor = GRUPOS_IND[ind.g].cor;
-          A.alt[rr] = 15.75;
-          const g = grupos.find(x => rr >= x.ini && rr <= x.fim), topo = rr === g.ini, base = rr === g.fim;
-          const bT = topo ? DMED : null, bB = base ? DMED : null;
-          const st = (extra = {}) => Object.assign({ fill: cor, font: { sz: 10 } }, extra);
-          const fmtD = ind.tipo === 'taxa' ? '0%' : ind.fmt === '#,##0.0' ? '[>=1000]#,##0;#,##0.0' : ind.fmt;
-          A.put(rr, 3, ind.nome, st({ font: { b: 1, sz: 10 }, border: { r: DMED, t: bT, b: bB } }));
-          A.put(rr, 4, { f: `IFERROR(1/(1/INDEX(${metaLinha(k)},MATCH(${cliRef},${metaCab},0))),"")`, v: metaCliente(cli, ind.meta) || '' }, st({ font: { b: 1, sz: 10 }, fmt: ind.tipo === 'taxa' ? '0%' : '#,##0', border: { l: DMED, r: DMED, t: bT, b: bB } }));
-          A.put(rr, 5, undefined, st({ border: { t: bT, b: bB } }));
-          const vals = [];
-          for (let d = 1; d <= 31; d++) {
-            const c = C0 + d - 1, L = XL.colL(c), borda = { l: d === 1 ? DMED : DOT, r: d === 31 ? DMED : DOT, t: topo ? DMED : null, b: base ? DMED : DOT };
-            let f, v;
-            if (ind.tipo === 'taxa') {
-              const cd = `${L}${rowOf.occ_disp}`, co = `${L}${rowOf.occ_ocup}`;
-              f = `IF(AND(ISNUMBER(${cd}),ISNUMBER(${co})),IF(${cd}>0,${co}/${cd},""),"")`;
-              const vd = d <= n ? valMesCli(cli, 'occ_disp', d) : '', vo = d <= n ? valMesCli(cli, 'occ_ocup', d) : '';
-              v = typeof vd === 'number' && typeof vo === 'number' && vd > 0 ? vo / vd : '';
-            } else {
-              const col = BR(k);
-              f = `IF(${L}$3="","",IF(COUNTIFS(${BD},${L}$3,${BC},${cliRef},${col},"<>")=0,"",SUMIFS(${col},${BD},${L}$3,${BC},${cliRef})))`;
-              v = d <= n ? valMesCli(cli, k, d) : '';
-            }
-            vals.push(v);
-            A.put(rr, c, { f, v }, st({ fmt: fmtD, border: borda }));
-          }
-          const fx = `${XL.colL(C0)}${rr}:${XL.colL(CL)}${rr}`, vs = numeros(vals);
-          const stM = st({ font: { b: 1, sz: 10 }, fmt: fmtD, border: { l: DMED, r: DMED, t: topo ? DMED : null, b: base ? DMED : DOT } });
-          if (ind.tipo === 'fluxo') A.put(rr, CM, { f: `IF(COUNT(${fx})=0,"",SUM(${fx}))`, v: vs.length ? soma(vs) : '' }, stM);
-          else if (ind.tipo === 'taxa') {
-            const md = `${XL.colL(CM)}${rowOf.occ_disp}`, mo = `${XL.colL(CM)}${rowOf.occ_ocup}`;
-            A.put(rr, CM, { f: `IF(AND(ISNUMBER(${md}),ISNUMBER(${mo})),IF(${md}>0,${mo}/${md},""),"")`, v: vs.length ? vs[vs.length - 1] : '' }, stM);
-          } else if (ind.tipo === 'disp') {
-            A.put(rr, CM, { f: `IF(COUNT(${fx})>0,LOOKUP(9.99E+307,${fx}),IFERROR(IF(INDEX(${colR(B_MOD)},MATCH(${cliRef},${BC},0))&""="Contrato","",INDEX(${colR(B_MOD)},MATCH(${cliRef},${BC},0))&""),""))`, v: vs.length ? vs[vs.length - 1] : (modal && modal !== 'Contrato' ? modal : '') }, stM);
-          } else A.put(rr, CM, { f: `IFERROR(LOOKUP(9.99E+307,${fx}),"")`, v: vs.length ? vs[vs.length - 1] : '' }, stM);
-          if (k === 'nc_inc') A.cf.push({ sqref: fx, dxf: dxNC, f: `AND(ISNUMBER(${XL.colL(C0)}${rr}),${XL.colL(C0)}${rr}>0)` });
-          if (ind.tipo === 'taxa') {
-            const c1 = `${XL.colL(C0)}${rr}`;
-            const sq = `${fx} ${XL.colL(CM)}${rr}`;
-            A.cf.push({ sqref: sq, dxf: dxExc, stop: 1, f: `AND(ISNUMBER(${c1}),${c1}>1)` });
-            A.cf.push({ sqref: sq, dxf: dxAlta, stop: 1, f: `AND(ISNUMBER(${c1}),${c1}>=${CFG.critico})` });
-            A.cf.push({ sqref: sq, dxf: dxAten, stop: 1, f: `AND(ISNUMBER(${c1}),${c1}>=${CFG.atencao})` });
-            A.cf.push({ sqref: sq, dxf: dxBaixa, f: `ISNUMBER(${c1})` });
-          }
-        });
-        grupos.forEach(g => A.caixa(g.ini, 2, g.fim, 2, GRUPOS_IND[g.g].rot, { fill: GRUPOS_IND[g.g].cor, font: { b: 1, sz: 10 } }));
-        A.caixa(r0, 1, r0 + keys.length - 1, 1, nm, { font: { b: 1, sz: 9 }, align: { wrap: 1 } });
-        r = r0 + keys.length; A.alt[r] = 13.5; r++;
+
+      // ---- catálogo de linhas (colunas ocultas à direita): indicador, grupo, coluna da BD, tipo, meta, formato, se o cliente usa ----
+      const MON_KEYS = ORDEM.filter(k => SET_MODO.includes(k)), NIM = MON_KEYS.length, RN = R0 + NIM - 1;
+      const HC0 = CM + 3, hcL = i => XL.colL(HC0 + i), hR = i => `$${hcL(i)}$${R0}:$${hcL(i)}$${RN}`;
+      ['Indicador', 'Grupo', 'Coluna BD', 'Tipo', 'Linha meta', 'Formato', 'Usa?', 'Nº', '', 'Linha →', 'Col BD', 'Tipo', 'Formato', 'Meta']
+        .forEach((h, i) => { if (h) A.put(5, HC0 + i, h, { font: { b: 1, sz: 8, color: '7F7F7F' } }); A.cols[HC0 + i] = [10, 1]; });
+      A.cols[CM + 1] = [2, 1]; A.cols[CM + 2] = [2, 1];
+      const fmtK = k => IND_CAT[k].tipo === 'taxa' ? 'pct' : IND_CAT[k].fmt === '#,##0.0' ? 'dec' : 'int';
+      const mcol = k => `Config!$${XL.colL(4 + BASE_KEYS.indexOf(k))}$${MR0}:$${XL.colL(4 + BASE_KEYS.indexOf(k))}$${MRN}`;
+      const usaF = k => `IF(${CLI}="",0,IF(IFERROR(INDEX(${mcol(k)},MATCH(${CLI},Config!$B$${MR0}:$B$${MRN},0)),"Sim")="Não",0,1))`;
+      const usaJS = MON_KEYS.map(k => cliMon.c ? (appJS(jMon, k) ? 1 : 0) : 0);
+      MON_KEYS.forEach((k, i) => {
+        const rr = R0 + i, ind = IND_CAT[k], st = { font: { sz: 8, color: '7F7F7F' } };
+        A.put(rr, HC0, ind.nome, st); A.put(rr, HC0 + 1, GRUPOS_IND[ind.g].rot, st);
+        A.put(rr, HC0 + 2, BI[k] || 0, st); A.put(rr, HC0 + 3, ind.tipo, st);
+        A.put(rr, HC0 + 4, META_KEYS.indexOf(k) + 1, st); A.put(rr, HC0 + 5, fmtK(k), st);
+        const fU = ind.tipo === 'taxa' ? `MIN(${hcL(6)}${R0 + MON_KEYS.indexOf('occ_disp')},${hcL(6)}${R0 + MON_KEYS.indexOf('occ_ocup')})` : usaF(k);
+        A.put(rr, HC0 + 6, { f: fU, v: usaJS[i] }, st);
+        A.put(rr, HC0 + 7, { f: i ? `${hcL(7)}${rr - 1}+${hcL(6)}${rr}` : `${hcL(6)}${rr}`, v: usaJS.slice(0, i + 1).reduce((a, b) => a + b, 0) }, st);
       });
-      A.put(r, 1, `Mês / ano: filtro na célula vermelha do canto superior direito. Célula vazia = sem registro. MÊS: soma nos fluxos e NC; último dado em ocupação e efetivo. Taxa = ocupadas ÷ disponíveis (contrato). Ocupação: verde ≥ ${Math.round(CFG.critico * 100)}% (alta, boa notícia), verde escuro > 100% (excede o contratado), amarelo ${Math.round(CFG.atencao * 100)}–${Math.round(CFG.critico * 100)}% (média), vermelho < ${Math.round(CFG.atencao * 100)}% (ociosidade). Incidente > 0 em vermelho. META: ${VAZIO ? 'aba BD (tabela de metas).' : 'preenchida a partir de meta.metas do Power Automate, quando houver.'}`,
+      // ---- linhas visíveis: a i-ésima linha mostra o i-ésimo indicador que o cliente usa ----
+      const visK = MON_KEYS.filter((k, i) => usaJS[i]);
+      const BDALL = `BD!$A$${BASE_R0}:$${XL.colL(B_ULT)}$${BASE_RN}`;
+      const OCUP = BR('occ_ocup'), DISP = BR('occ_disp');
+      const MB = `BD!$${XL.colL(MC1)}$${MH + 1}:$${XL.colL(MCN)}$${MH + META_KEYS.length}`;
+      const stBase = (extra = {}) => Object.assign({ font: { sz: 10 } }, extra);
+      for (let i = 0; i < NIM; i++) {
+        const rr = R0 + i, k = visK[i] || null, ind = k ? IND_CAT[k] : null;
+        A.alt[rr] = 15.75;
+        const IDX = `$${hcL(9)}${rr}`, COLB = `$${hcL(10)}${rr}`, TIPO = `$${hcL(11)}${rr}`, FMT = `$${hcL(12)}${rr}`, MOFF = `$${hcL(13)}${rr}`;
+        const pick = (j, v) => ({ f: `IF(${IDX}=0,"",INDEX(${hR(j)},${IDX}))`, v });
+        A.put(rr, HC0 + 9, { f: `IFERROR(MATCH(${i + 1},${hR(7)},0),0)`, v: k ? MON_KEYS.indexOf(k) + 1 : 0 }, { font: { sz: 8, color: '7F7F7F' } });
+        A.put(rr, HC0 + 10, pick(2, k ? (BI[k] || 0) : ''), { font: { sz: 8, color: '7F7F7F' } });
+        A.put(rr, HC0 + 11, pick(3, k ? ind.tipo : ''), { font: { sz: 8, color: '7F7F7F' } });
+        A.put(rr, HC0 + 12, pick(5, k ? fmtK(k) : ''), { font: { sz: 8, color: '7F7F7F' } });
+        A.put(rr, HC0 + 13, pick(4, k ? META_KEYS.indexOf(k) + 1 : ''), { font: { sz: 8, color: '7F7F7F' } });
+        const bT = i === 0 ? DMED : null, bB = i === NIM - 1 ? DMED : DOT;
+        A.put(rr, 2, pick(1, k ? GRUPOS_IND[ind.g].rot : ''), stBase({ font: { b: 1, sz: 9 }, border: { t: bT, b: bB } }));
+        A.put(rr, 3, pick(0, k ? ind.nome : ''), stBase({ font: { b: 1, sz: 10 }, align: { h: 'left' }, border: { r: DMED, t: bT, b: bB } }));
+        const mv = k && cliMon.c ? metaCliente(cliMon.c, ind.meta) : null;
+        A.put(rr, 4, { f: `IF(OR(${IDX}=0,N(${MOFF})=0),"",IFERROR(1/(1/INDEX(${MB},${MOFF},MATCH(${CLI},${metaCab},0))),""))`, v: mv || '' }, stBase({ font: { b: 1, sz: 10 }, fmt: '#,##0', border: { l: DMED, r: DMED, t: bT, b: bB } }));
+        A.put(rr, 5, undefined, stBase({ border: { t: bT, b: bB } }));
+        const vals = [];
+        for (let d = 1; d <= 31; d++) {
+          const c = C0 + d - 1, L = XL.colL(c), dt = `${L}$5`;
+          const col = `INDEX(${BDALL},0,${COLB})`;
+          const f = `IF(OR(${IDX}=0,${dt}=""),"",IF(${TIPO}="taxa",IF(COUNTIFS(${BD},${dt},${BC},${CLI},${OCUP},"<>")=0,"",IFERROR(SUMIFS(${OCUP},${BD},${dt},${BC},${CLI})/SUMIFS(${DISP},${BD},${dt},${BC},${CLI}),"")),` +
+            `IF(COUNTIFS(${BD},${dt},${BC},${CLI},${col},"<>")=0,"",SUMIFS(${col},${BD},${dt},${BC},${CLI}))))`;
+          let v = '';
+          if (k && d <= n && cliMon.c) {
+            if (ind.tipo === 'taxa') { const o = valMesCli(cliMon.c, 'occ_ocup', d), p = valMesCli(cliMon.c, 'occ_disp', d); v = typeof o === 'number' && typeof p === 'number' && p > 0 ? o / p : ''; }
+            else v = valMesCli(cliMon.c, k, d);
+          }
+          vals.push(v);
+          A.put(rr, c, { f, v }, stBase({ fmt: '#,##0', border: { l: d === 1 ? DMED : DOT, r: d === 31 ? DMED : DOT, t: bT, b: bB } }));
+        }
+        const fx = `${XL.colL(C0)}${rr}:${XL.colL(CL)}${rr}`, vs = numeros(vals);
+        A.put(rr, CM, { f: `IF(${IDX}=0,"",IF(${TIPO}="fluxo",IF(COUNT(${fx})=0,"",SUM(${fx})),IFERROR(LOOKUP(9.99E+307,${fx}),"")))`, v: !k ? '' : ind.tipo === 'fluxo' ? (vs.length ? soma(vs) : '') : (vs.length ? vs[vs.length - 1] : '') },
+          stBase({ font: { b: 1, sz: 10 }, fmt: '#,##0', border: { l: DMED, r: DMED, t: bT, b: bB } }));
+      }
+      A.caixa(R0, 1, RN, 1, { f: `${CLI}&""`, v: cliMon.nm }, { font: { b: 1, sz: 10 }, align: { wrap: 1 }, border: { t: DMED, b: DMED, l: DMED, r: DMED } });
+      // destaques (prioridade sobre as cores dos grupos): incidente > 0 · taxa de ocupação por faixa
+      const blocoD = `${XL.colL(C0)}${R0}:${XL.colL(CM)}${RN}`, c1 = `${XL.colL(C0)}${R0}`, tipo1 = `$${hcL(11)}${R0}`, nome1 = `$C${R0}`;
+      A.cf.push({ sqref: blocoD, dxf: dxNC, stop: 1, f: `AND(${nome1}="Incidentes",ISNUMBER(${c1}),${c1}>0)` });
+      A.cf.push({ sqref: blocoD, dxf: dxExc, stop: 1, f: `AND(${tipo1}="taxa",ISNUMBER(${c1}),${c1}>1)` });
+      A.cf.push({ sqref: blocoD, dxf: dxAlta, stop: 1, f: `AND(${tipo1}="taxa",ISNUMBER(${c1}),${c1}>=calculos!$B$6)` });
+      A.cf.push({ sqref: blocoD, dxf: dxAten, stop: 1, f: `AND(${tipo1}="taxa",ISNUMBER(${c1}),${c1}>=calculos!$B$5)` });
+      A.cf.push({ sqref: blocoD, dxf: dxBaixa, f: `AND(${tipo1}="taxa",ISNUMBER(${c1}))` });
+      // formato: % na taxa (inclusive meta) · 1 casa em toneladas
+      const blocoF = `D${R0}:${XL.colL(CM)}${RN}`, fmt1 = `$${hcL(12)}${R0}`;
+      A.cf.push({ sqref: blocoF, dxf: E.dxfFmt('0%'), f: `${fmt1}="pct"` });
+      A.cf.push({ sqref: blocoF, dxf: E.dxfFmt('[>=1000]#,##0;#,##0.0'), f: `${fmt1}="dec"` });
+      // cor do grupo na linha (IN, OUT, NC, OCUPAÇÃO, GENTE)
+      Object.keys(GRUPOS_IND).forEach(g => A.cf.push({ sqref: `B${R0}:${XL.colL(CM)}${RN}`, dxf: E.dxfFill(GRUPOS_IND[g].cor), f: `$B${R0}="${GRUPOS_IND[g].rot}"` }));
+      const r = RN + 2;
+      A.put(r, 1, `Cliente e mês: células do topo. Linhas = indicadores marcados "Sim" para o cliente na aba Config (tabela 2). Célula vazia = sem registro. MÊS: soma nos fluxos e NC; último dado em ocupação e efetivo. Taxa = ocupadas ÷ disponíveis (contrato). Ocupação: verde ≥ faixa alta, verde escuro > 100% (excede o contratado), amarelo ≥ faixa de atenção, vermelho abaixo (ociosidade). META: aba BD (tabela de metas).`,
         { font: { i: 1, sz: 8, color: '7F7F7F' }, align: { h: 'left' } });
       A.areaImp = `$A$1:$${XL.colL(CM)}$${r}`;
 
@@ -5099,8 +5202,8 @@ $('out-tudo')?.addEventListener('click', () => {
       Q.put(qFim + 1, 2, `Realizado: soma do mês nos fluxos (IN, OUT, incidentes, no show, falta, folga, férias, desligamento); último valor informado por cliente em backlog, posições, taxa e efetivo (dia sem lançamento mantém o valor anterior). Média/dia: dias com movimento. Metas e faixas: aba calculos (células amarelas). Vazio = sem registro.`, { font: { i: 1, sz: 8, color: '7F7F7F' }, align: { h: 'left' } });
       let gr = qFim + 3;
       secao(gr, 'RESUMO POR CLIENTE · mês inteiro · segue o filtro desta aba');
-      const VISs = C2.VIS.slots, NV = VISs.length;
-      const RH = gr + 1, nCol = NV + 1, livre = WIDE.length - 5, w = Math.max(1, Math.floor(livre / nCol));
+      const VISs = C2.VIS.slots, NVS = VISs.length;
+      const RH = gr + 1, nCol = NVS + 1, livre = WIDE.length - 5, w = Math.max(1, Math.floor(livre / nCol));
       const RC = [['GRUPO', 2], ['INDICADOR', 3]].concat(VISs.map(sl => [sl, w])).concat([['TOTAL', w]]);
       s0 = 0; const RSp = RC.map(([t, ww]) => { if (s0 + ww > WIDE.length) return null; const rg = span(s0, ww); s0 += ww; return rg; });
       Q.alt[RH] = UNI ? 34 : 30;
@@ -5184,14 +5287,14 @@ $('out-tudo')?.addEventListener('click', () => {
         });
         // estoques (último valor por cliente até o dia) para ocupadas e efetivo
         const R0 = 10, RL = R0 + 30, RT = RL + 1, RCL = RT + 4;
-        const HX0 = RCL + clis.length + 6;
+        const HX0 = RCL + NV + 6;
         const lastC = XL.colL(2 + listaCli.length);
         const ult = (nm, k, i1, i2) => { const rs = baseRows.filter(x => x.nome === nm && x.d >= i1 && x.d <= i2 && ok(x.vals[k])); return rs.length ? rs[rs.length - 1].vals[k] : ''; };
         const HD = {};
         ['occ_ocup', 'gen_efe'].forEach((k, bi) => {
           const hr = HX0 + bi * 34, col = BR(k), H = { hr, dia: [] };
           KD.put(hr, 1, `${IND_CAT[k].nome} (último valor até o dia)`, stH); KD.put(hr, 2, 'Data', stH);
-          listaCli.forEach((nm, j) => KD.put(hr, 3 + j, nm, stH));
+          listaCli.forEach((nm, j) => KD.put(hr, 3 + j, cabSlot(j), stH));
           for (let d = 1; d <= 31; d++) {
             const rr = hr + d, iso = `${mk}-${pad2(d)}`, linha = [];
             KD.put(rr, 1, d, { font: { sz: 8 } });
@@ -5200,12 +5303,12 @@ $('out-tudo')?.addEventListener('click', () => {
               const cNm = `${XL.colL(3 + j)}$${hr}`, cr = `${BC},${cNm},${BD},">="&$C$3,${BD},"<="&$B${rr},${col},"<>"`;
               const v = d > n || d > ateDia ? '' : ult(nm, k, `${mk}-01`, iso);
               linha.push(v);
-              KD.put(rr, 3 + j, { f: `IF(OR($B${rr}="",$A${rr}>$B$4),"",IF(COUNTIFS(${cr})=0,"",SUMIFS(${col},${BC},${cNm},${BD},_xlfn.MAXIFS(${BD},${cr}))))`, v }, { font: { sz: 8 }, fmt: '#,##0' });
+              KD.put(rr, 3 + j, { f: `IF(OR($B${rr}="",$A${rr}>$B$4,${cNm}=""),"",IF(COUNTIFS(${cr})=0,"",SUMIFS(${col},${BC},${cNm},${BD},_xlfn.MAXIFS(${BD},${cr}))))`, v }, { font: { sz: 8 }, fmt: '#,##0' });
             });
             H.dia.push(linha);
           }
           KD.put(hr + 32, 1, 'Depósito', { font: { b: 1, sz: 8 }, align: { h: 'left' } });
-          listaCli.forEach((nm, j) => KD.put(hr + 32, 3 + j, depNome[nm], { font: { sz: 8 } }));
+          listaCli.forEach((nm, j) => KD.put(hr + 32, 3 + j, depSlot(j), { font: { sz: 8 } }));
           H.dep = `$C$${hr + 32}:$${lastC}$${hr + 32}`;
           H.linha = rr => `$C$${rr}:$${lastC}$${rr}`;
           H.soma = (vals, dep) => { const v = vals.filter((x, j) => depNome[listaCli[j]] === dep && typeof x === 'number'); return v.length ? v.reduce((a, b) => a + b, 0) : ''; };
@@ -5259,16 +5362,18 @@ $('out-tudo')?.addEventListener('click', () => {
         KD.put(RCL - 1, 1, 'Veículos IN + OUT por cliente no mês', stH);
         KD.put(RCL - 1, 2, 'Depósito', stH);
         DEPS.forEach((dp, j) => KD.put(RCL - 1, 3 + j, dp, stH));
-        const ordem = clis.slice().sort((a, b) => depC(a).localeCompare(depC(b)) || nomeCli(a).localeCompare(nomeCli(b), 'pt-BR'));
+        // clientes cadastrados na Config (lista compacta: vagas livres ficam no fim)
+        const cheiosC = SLOT.filter(sl => sl.nm), ordem = SLOT.map((_, i) => cheiosC[i] || { c: null, nm: '', dep: '' });
         const porCli = DEPS.map(() => []);
-        ordem.forEach((c, i) => {
-          const rr = RCL + i, nm = nomeCli(c), cA = `$A${rr}`;
-          KD.put(rr, 1, nm, { font: { sz: 9 }, align: { h: 'left' } }); KD.put(rr, 2, depC(c), { font: { sz: 9 } });
-          const tot = baseRows.filter(b => b.cli === c && b.d.startsWith(mk)).reduce((a, b) => a + (b.vals.in_vei || 0) + (b.vals.out_vei || 0), 0);
+        ordem.forEach((sl, i) => {
+          const rr = RCL + i, c = sl.c, cA = `$A${rr}`, rL = 12 + GERAL.length + i;
+          KD.put(rr, 1, { f: `calculos!$${XL.colL(L_CLI)}$${rL}&""`, v: sl.nm }, { font: { sz: 9 }, align: { h: 'left' } });
+          KD.put(rr, 2, { f: `calculos!$${XL.colL(L_DEPX)}$${rL}&""`, v: sl.nm ? sl.dep : '' }, { font: { sz: 9 } });
+          const tot = c ? baseRows.filter(b => b.cli === c && b.d.startsWith(mk)).reduce((a, b) => a + (b.vals.in_vei || 0) + (b.vals.out_vei || 0), 0) : 0;
           DEPS.forEach((dp, j) => {
-            const v = depC(c) === dp ? tot : 0;
+            const v = c && depC(c) === dp ? tot : 0;
             porCli[j].push(v);
-            KD.put(rr, 3 + j, { f: `IF($B${rr}="${dp}",SUMIFS(${BR('in_vei')},${BC},${cA},${BD},">="&$C$3,${BD},"<="&$D$3)+SUMIFS(${BR('out_vei')},${BC},${cA},${BD},">="&$C$3,${BD},"<="&$D$3),0)`, v }, { font: { sz: 9 }, fmt: '#,##0' });
+            KD.put(rr, 3 + j, { f: `IF(AND($A${rr}<>"",$B${rr}="${dp}"),SUMIFS(${BR('in_vei')},${BC},${cA},${BD},">="&$C$3,${BD},"<="&$D$3)+SUMIFS(${BR('out_vei')},${BC},${cA},${BD},">="&$C$3,${BD},"<="&$D$3),0)`, v }, { font: { sz: 9 }, fmt: '#,##0' });
           });
         });
         const RCF = RCL + ordem.length - 1;
@@ -5319,7 +5424,7 @@ $('out-tudo')?.addEventListener('click', () => {
         S.charts.push({ r1: G2, c1: 2, r2: G2 + HGc - 1, c2: 13, xml: XL.grafico({ tipo: 'col', titulo: 'Taxa de ocupação por dia · JSL x TPC', cat: dias, semRotulo: 1, eixoVal: 1, fmtEixo: '0%', gap: 40, series: serD(6).concat([
           { nome: `Média ${Math.round(CFG.atencao * 100)}%`, ref: `calculos!$${XL.colL(C1.FA)}$${C1.KR0}:$${XL.colL(C1.FA)}$${C1.KRL}`, vals: Array(31).fill(CFG.atencao), cor: 'C98A00', linha: 1, tracejado: 1, rotulo: false },
           { nome: `Alta ${Math.round(CFG.critico * 100)}%`, ref: `calculos!$${XL.colL(C1.FC)}$${C1.KR0}:$${XL.colL(C1.FC)}$${C1.KRL}`, vals: Array(31).fill(CFG.critico), cor: '2F7D4E', linha: 1, tracejado: 1, rotulo: false }]) }) });
-        S.charts.push({ r1: G2, c1: 15, r2: G2 + HGc - 1, c2: SU, xml: XL.grafico({ tipo: 'bar', empilhado: 1, titulo: 'Veículos (IN + OUT) por cliente no mês', cat: { ref: `calculos_consolidado!$A$${RCL}:$A$${RCF}`, vals: ordem.map(nomeCli) }, szCat: ordem.length > 10 ? 7 : 9, szRot: 8, fmtRot: '#,##0;;', gap: 40, series: DEPS.map((dp, j) => ({ nome: dp, ref: `calculos_consolidado!$${XL.colL(3 + j)}$${RCL}:$${XL.colL(3 + j)}$${RCF}`, vals: porCli[j], cor: corDep(dp) })) }) });
+        S.charts.push({ r1: G2, c1: 15, r2: G2 + HGc - 1, c2: SU, xml: XL.grafico({ tipo: 'bar', empilhado: 1, titulo: 'Veículos (IN + OUT) por cliente no mês', cat: { ref: `calculos_consolidado!$A$${RCL}:$A$${RCF}`, vals: ordem.map(sl => sl.nm) }, szCat: cheiosC.length > 10 ? 7 : 9, szRot: 8, fmtRot: '#,##0;;', gap: 40, series: DEPS.map((dp, j) => ({ nome: dp, ref: `calculos_consolidado!$${XL.colL(3 + j)}$${RCL}:$${XL.colL(3 + j)}$${RCF}`, vals: porCli[j], cor: corDep(dp) })) }) });
         S.caixa(G2 + HGc, 2, G2 + HGc, SU, 'Detalhe por depósito e cliente: abas Dashboard (filtro Todos / Depósito / Cliente e período), Monitoramento e Consol Mensal. Fonte: aba BD (coluna Depósito).', { font: { i: 1, sz: 8, color: '9A9A9A' }, align: { h: 'left' } }, null);
         S.areaImp = `$A$1:$${XL.colL(SU + 1)}$${G2 + HGc}`;
         return [S, KD];
