@@ -3957,7 +3957,7 @@ $('out-tudo')?.addEventListener('click', () => {
       return gerarExcelMonitorInt(mk, clienteInicial, opts);
     }
     function gerarExcelMonitorInt(mk, clienteInicial, opts) {
-      const VAZIO = !!opts.vazio;
+      const VAZIO = !!opts.vazio, SEM_PA = VAZIO || !!opts.semPA;   // semPA: com dados, sem menção ao Power Automate
       const E = new XL.Estilos();
       const ano = mk.slice(0, 4), n = diasNoMes(mk);
       const MODO = DEP || (DEPOSITOS.length > 1 ? 'UNI' : (DEPOSITOS[0] || 'JSL'));
@@ -4117,7 +4117,7 @@ $('out-tudo')?.addEventListener('click', () => {
       const colsMetaBD = depCols.concat(listaCli);
       const MH = 22, MC0 = IC, MC1 = IC + 1, MCN = IC + 1 + colsMetaBD.length;
       const stHB = { fill: XL_COR.tinta, font: { b: 1, sz: 9, color: 'FFFFFF' }, align: { wrap: 1 } };
-      B.put(MH - 1, MC0, 'METAS DO MÊS — preencha as células amarelas (vazio = sem meta · taxa de ocupação em %).' + (VAZIO ? '' : ' Saem preenchidas com meta.metas do Power Automate.'), { font: { b: 1, sz: 10, color: XL_COR.vermelho }, align: { h: 'left' } });
+      B.put(MH - 1, MC0, 'METAS DO MÊS — preencha as células amarelas (vazio = sem meta · taxa de ocupação em %).' + (SEM_PA ? '' : ' Saem preenchidas com meta.metas do Power Automate.'), { font: { b: 1, sz: 10, color: XL_COR.vermelho }, align: { h: 'left' } });
       B.put(MH, MC0, 'Indicador', stHB); B.put(MH, MC1, 'Todos', stHB); B.cols[MC1] = 11; B.alt[MH] = 30;
       colsMetaBD.forEach((nm, j) => { const js = j - depCols.length; B.put(MH, MC1 + 1 + j, js >= 0 ? cabSlot(js) : nm, stHB); B.cols[MC1 + 1 + j] = 12; });
       const MROW = {};
@@ -5017,7 +5017,7 @@ $('out-tudo')?.addEventListener('click', () => {
         series: [sPerf(g, 'in', 'sem', XL_COR.barra), sPerf(g, 'out', 'sem', 'A6A6A6')] });
       X.charts.push({ r1: g3, c1: XE[0], r2: g3 + HG - 1, c2: XE[1], xml: semPerf(C1.TIT.xspal, 'A') });
       X.charts.push({ r1: g3, c1: XD[0], r2: g3 + HG - 1, c2: XD[1], xml: semPerf(C1.TIT.xston, 'B') });
-      X.caixa(g3 + HG, 2, g3 + HG, XU, `Cards: período digitado (dia inicial e final). Gráficos: mês do dia inicial. Absenteísmo (H/H) = faltas ÷ homem-dia (soma do efetivo diário) · Turnover = desligamentos ÷ efetivo · CAF/SAF = acidentes com / sem afastamento. Metas: aba BD.${VAZIO ? '' : ' Fonte: Power Automate · IntraLog.'}`, { font: { i: 1, sz: 8, color: '9A9A9A' }, align: { h: 'left' } }, null);
+      X.caixa(g3 + HG, 2, g3 + HG, XU, `Cards: período digitado (dia inicial e final). Gráficos: mês do dia inicial. Absenteísmo (H/H) = faltas ÷ homem-dia (soma do efetivo diário) · Turnover = desligamentos ÷ efetivo · CAF/SAF = acidentes com / sem afastamento. Metas: aba BD.${SEM_PA ? '' : ' Fonte: Power Automate · IntraLog.'}`, { font: { i: 1, sz: 8, color: '9A9A9A' }, align: { h: 'left' } }, null);
       X.areaImp = `$A$1:$${XL.colL(XU + 1)}$${g3 + HG}`;
       X.primeira = !UNI;
 
@@ -5127,7 +5127,7 @@ $('out-tudo')?.addEventListener('click', () => {
         if (vaga) for (let x = r0; x <= r0 + keys.length; x++) A.ocultas.add(x);
         r = r0 + keys.length; A.alt[r] = 13.5; r++;
       });
-      A.put(r, 1, `Mês / ano: filtro na célula vermelha do canto superior direito. Célula vazia = sem registro. MÊS: soma nos fluxos e NC; último dado em ocupação e efetivo. Taxa = ocupadas ÷ disponíveis (contrato). Ocupação: verde ≥ ${Math.round(CFG.critico * 100)}% (alta, boa notícia), verde escuro > 100% (excede o contratado), amarelo ${Math.round(CFG.atencao * 100)}–${Math.round(CFG.critico * 100)}% (média), vermelho < ${Math.round(CFG.atencao * 100)}% (ociosidade). Incidente > 0 em vermelho. META: ${VAZIO ? 'aba BD (tabela de metas).' : 'preenchida a partir de meta.metas do Power Automate, quando houver.'}`,
+      A.put(r, 1, `Mês / ano: filtro na célula vermelha do canto superior direito. Célula vazia = sem registro. MÊS: soma nos fluxos e NC; último dado em ocupação e efetivo. Taxa = ocupadas ÷ disponíveis (contrato). Ocupação: verde ≥ ${Math.round(CFG.critico * 100)}% (alta, boa notícia), verde escuro > 100% (excede o contratado), amarelo ${Math.round(CFG.atencao * 100)}–${Math.round(CFG.critico * 100)}% (média), vermelho < ${Math.round(CFG.atencao * 100)}% (ociosidade). Incidente > 0 em vermelho. META: ${SEM_PA ? 'aba BD (tabela de metas).' : 'preenchida a partir de meta.metas do Power Automate, quando houver.'}`,
         { font: { i: 1, sz: 8, color: '7F7F7F' }, align: { h: 'left' } });
       A.areaImp = `$A$1:$${XL.colL(CM)}$${r}`;
 
