@@ -3566,7 +3566,7 @@ $('out-tudo')?.addEventListener('click', () => {
       class Aba {
         constructor(nome, E) {
           this.nome = nome; this.E = E; this.rows = new Map(); this.cols = {}; this.alt = {};
-          this.merges = []; this.cf = []; this.dv = []; this.imgs = []; this.charts = [];
+          this.merges = []; this.cf = []; this.dv = []; this.imgs = []; this.charts = []; this.ocultas = new Set();
           this.freeze = null; this.grid = false; this.tab = null; this.state = null; this.filtro = null;
           this.paisagem = true; this.zoom = 100; this.defAlt = 15;
         }
@@ -3608,7 +3608,7 @@ $('out-tudo')?.addEventListener('click', () => {
               return `<c r="${rr}"${s} t="inlineStr"><is><t xml:space="preserve">${xe(v)}</t></is></c>`;
             }).join('');
             const h = this.alt[r];
-            return `<row r="${r}"${h ? ` ht="${h}" customHeight="1"` : ''}>${cs}</row>`;
+            return `<row r="${r}"${h ? ` ht="${h}" customHeight="1"` : ''}${this.ocultas.has(r) ? ' hidden="1"' : ''}>${cs}</row>`;
           }).join('');
           const cols = Object.keys(this.cols).map(Number).sort((a, b) => a - b)
             .map(c => { const w = this.cols[c]; return `<col min="${c}" max="${c}" width="${Array.isArray(w) ? w[0] : w}" customWidth="1"${Array.isArray(w) && w[1] ? ' hidden="1"' : ''}/>`; }).join('');
@@ -3807,8 +3807,9 @@ $('out-tudo')?.addEventListener('click', () => {
     })();
     const SET_JSL = ['in_vei', 'in_pal', 'in_ton', 'out_vei', 'out_pal', 'out_ton', 'nc_inc', 'nc_ns', 'nc_bkl',
       'occ_disp', 'occ_ocup', 'occ_tx', 'gen_efe', 'gen_fal', 'gen_fol', 'gen_fer', 'gen_des', 'gen_dsv', 'gen_caf', 'gen_saf'];
-    const SET_TPC = ['in_vei', 'in_pal', 'in_ton', 'in_lnf', 'in_cx', 'in_pec', 'in_itn', 'in_icm', 'in_cxf', 'in_cxm',
-      'out_vei', 'out_ped', 'out_pfat', 'out_itn', 'out_pec', 'out_lnf', 'out_cx', 'out_pal', 'out_ton',
+    // (Peças Movimentadas IN/OUT saíram da TPC)
+    const SET_TPC = ['in_vei', 'in_pal', 'in_ton', 'in_lnf', 'in_cx', 'in_itn', 'in_icm', 'in_cxf', 'in_cxm',
+      'out_vei', 'out_ped', 'out_pfat', 'out_itn', 'out_lnf', 'out_cx', 'out_pal', 'out_ton',
       'nc_inc', 'nc_ns', 'nc_bkl', 'occ_disp', 'occ_ocup', 'occ_tx', 'gen_efe', 'gen_fal', 'gen_fol', 'gen_fer', 'gen_des', 'gen_dsv', 'gen_caf', 'gen_saf'];
     const setDoDeposito = dep => dep === 'TPC' ? SET_TPC : SET_JSL;
     const SET_COMUM = ['nc_inc', 'nc_ns', 'nc_bkl', 'occ_disp', 'occ_ocup', 'occ_tx', 'gen_efe', 'gen_fal', 'gen_fol', 'gen_fer', 'gen_des', 'gen_dsv', 'gen_caf', 'gen_saf'];
@@ -3816,9 +3817,9 @@ $('out-tudo')?.addEventListener('click', () => {
     const IO_TPC = {
       'BASF': ['in_vei', 'in_pal', 'in_ton', 'out_vei', 'out_pal', 'out_ton'],
       'BEAUTYBIZ': ['in_vei', 'in_pal', 'in_cx', 'out_vei', 'out_pal', 'out_ped'],
-      'BOTICÁRIO': ['in_vei', 'in_icm', 'in_cxm', 'in_cxf', 'out_vei', 'out_pfat', 'out_itn', 'out_pal'],
+      'BOTICÁRIO': ['in_vei', 'in_pal', 'in_cx', 'in_icm', 'in_cxm', 'in_cxf', 'out_vei', 'out_pal', 'out_cx', 'out_pfat', 'out_itn'],
       'SUPPLY': ['in_vei', 'in_pal', 'in_ton', 'out_vei', 'out_pal', 'out_ton'],
-      'GE VERNOVA': ['in_vei', 'in_pal', 'in_pec', 'in_lnf', 'out_vei', 'out_pal', 'out_pec', 'out_lnf'],
+      'GE VERNOVA': ['in_vei', 'in_pal', 'in_lnf', 'out_vei', 'out_pal', 'out_lnf'],
       'VESTAS': ['in_vei', 'in_lnf', 'out_vei', 'out_lnf'],
       'VEDACIT': ['in_vei', 'in_pal', 'out_vei', 'out_pal'],
       'OMNLIFE': ['in_vei', 'in_pal', 'out_vei', 'out_pal'],
@@ -3857,8 +3858,9 @@ $('out-tudo')?.addEventListener('click', () => {
         const set = setDoCliente(c);
         ins = set.filter(k => k.startsWith('in_') && k !== 'in_vei');
         outs = set.filter(k => k.startsWith('out_') && k !== 'out_vei');
-        if (ins.length > 3) ins = padrao.in.filter(k => set.includes(k));    // cliente sem perfil próprio
-        if (outs.length > 3) outs = padrao.out.filter(k => set.includes(k));
+        const proprio = !!IO_TPC[String(c).trim().toUpperCase()];           // perfil próprio (monitoramento do cliente)
+        if (!proprio && ins.length > 3) ins = padrao.in.filter(k => set.includes(k));
+        if (!proprio && outs.length > 3) outs = padrao.out.filter(k => set.includes(k));
       }
       ins = ins.filter(tem); outs = outs.filter(tem);
       const fam = k => FAM_DASH[k.split('_')[1]];
@@ -4560,8 +4562,8 @@ $('out-tudo')?.addEventListener('click', () => {
           CF.caixa(1, 1, 1, NCC, `CONFIG · CLIENTES E DASHBOARD (${UNI ? DEPOSITOS.join(' + ') : MODO})`, { fill: XL_COR.tinta, font: { b: 1, sz: 14, color: 'FFFFFF' }, align: { h: 'left', indent: 1 } });
           const AJUDA = [
             'COMO USAR — a aba é protegida: Revisão › Desproteger Planilha (mesma senha da pasta), faça o ajuste e proteja de novo. Células amarelas = editáveis. Tudo se atualiza na hora; não precisa gerar o arquivo de novo.',
-            'INCLUIR CLIENTE: (1) tabela 1 › escreva o nome numa vaga livre (coluna CLIENTE)' + (UNI ? ' e escolha o DEPÓSITO' : '') + '; (2) tabela 2 › marque Sim/Não nas colunas da BD que ele preenche; (3) tabela 1 › ajuste cards e gráficos (já vêm no padrão); (4) aba BD › preencha as metas na coluna dele.',
-            'EXCLUIR CLIENTE: apague o nome na tabela 1 (a vaga fica livre e o cliente some dos filtros, do Monitoramento e do Consol Mensal). As linhas antigas da BD continuam no histórico (somam em "Todos" nos meses em que existiram).',
+            'INCLUIR CLIENTE: (1) tabela 1 › escreva o nome numa vaga livre (coluna CLIENTE)' + (UNI ? ' e escolha o DEPÓSITO' : '') + '; (2) tabela 2 › marque Sim/Não nas colunas da BD que ele preenche; (3) tabela 1 › ajuste cards e gráficos (já vêm no padrão); (4) aba BD › preencha as metas na coluna dele; (5) aba Monitoramento (desproteger) › reexiba as linhas de uma vaga livre no fim da aba, digite o nome na coluna CLIENTE e exclua as linhas que ele não usa.',
+            'EXCLUIR CLIENTE: apague o nome na tabela 1 (a vaga fica livre e o cliente some dos filtros e do Consol Mensal) e, na aba Monitoramento, oculte ou exclua as linhas do bloco dele. As linhas antigas da BD continuam no histórico (somam em "Todos" nos meses em que existiram).',
             'RENOMEAR: troque o nome na tabela 1 e, na BD, use Localizar e Substituir no nome antigo (Ctrl+L / Ctrl+H). O nome da BD precisa ser igual ao da tabela 1.'
           ];
           AJUDA.forEach((t, i) => { CF.alt[2 + i] = 30; CF.caixa(2 + i, 1, 2 + i, NCC, t, { fill: i ? 'FFFFFF' : 'FFF2CC', font: { b: i ? 0 : 1, sz: 9, color: '262626' }, align: { h: 'left', v: 'center', wrap: 1, indent: 1 } }, null); });
@@ -5019,120 +5021,113 @@ $('out-tudo')?.addEventListener('click', () => {
       X.areaImp = `$A$1:$${XL.colL(XU + 1)}$${g3 + HG}`;
       X.primeira = !UNI;
 
-      // ═══════════ MONITORAMENTO (um cliente por vez: cliente e mês no topo; linhas = indicadores que o cliente usa) ═══════════
+      // ═══════════ MONITORAMENTO (dia a dia por cliente, por fórmula) ═══════════
       const A = new XL.Aba('Monitoramento', E);
       A.tab = XL_COR.vermelho;
       const C0 = 6, CL = C0 + 30, CM = CL + 1;
       Object.assign(A.cols, { 1: 13, 2: 17.3, 3: 24, 4: 8, 5: 1.6 });
       for (let c = C0; c <= CL; c++) A.cols[c] = 6.3;
       A.cols[CM] = 9.5;
-      A.alt[1] = 34.5; A.alt[2] = 24; A.alt[3] = 6; A.alt[4] = 19.5; A.alt[5] = 13.5; A.alt[6] = 5.25;
-      const R0 = 7;
-      A.freeze = [R0, C0];
+      A.alt[1] = 34.5; A.alt[2] = 19.5; A.alt[3] = 13.5; A.alt[4] = 5.25;
+      A.freeze = [5, C0];
       for (let c = 1; c <= C0; c++) A.put(1, c, undefined, { fill: CINZA_LOGO, border: { b: DMED } });
       A.caixa(1, C0 + 1, 1, CM - 7, `MONITORAMENTO DIÁRIO DE PERFORMANCE${UNI || MODO === 'TPC' ? ' · ' + rotDep : ''}`, { fill: XL_COR.vermelho, font: { b: 1, sz: 14, color: 'FFFFFF' }, border: { b: DMED } }, null);
       seletorMes(A, 1, CM - 6, CM);
       A.imgs.push({ src: LOGO, r: 1, c: 1, dx: 8, dy: 5, w: 121, h: 34 });
-      // filtro de cliente
-      const cliMon = (SLOT.find(sl => sl.c === clienteInicial) || SLOT.find(sl => sl.c) || { c: null, nm: '' });
-      const jMon = Math.max(0, SLOT.indexOf(cliMon));
-      A.caixa(2, 1, 2, 2, 'CLIENTE  ▸', { font: { b: 1, sz: 12, color: XL_COR.tinta }, align: { h: 'right', indent: 1 } }, null);
-      A.caixa(2, 3, 2, 4, cliMon.nm, { fill: XL_COR.entrada, font: { b: 1, sz: 12 }, unlocked: 1 }, ['medium', XL_COR.barra]);
-      A.dv.push({ sqref: 'C2', lista: LISTA_CLIS, titulo: 'Cliente', msg: 'Escolha o cliente. As linhas mostram só os indicadores que ele usa (Config, tabela 2).' });
-      A.caixa(2, C0, 2, CM, 'Escolha o cliente (célula amarela) e o mês (célula vermelha). Linhas = indicadores que o cliente usa, conforme a aba Config.', { font: { i: 1, sz: 9, color: '7F7F7F' }, align: { h: 'left', indent: 1 } }, null);
-      const CLI = '$C$2';
-      A.caixa(4, 1, 5, 1, 'CLIENTE', { font: { b: 1, sz: 10 } });
-      A.caixa(4, 2, 5, 3, 'INDICADORES', { fill: XL_COR.cab, font: { b: 1, sz: 10 } });
-      A.caixa(4, 4, 5, 4, 'META', { fill: XL_COR.cab, font: { b: 1, sz: 10 } });
-      A.caixa(4, C0, 4, CL, 'REALIZADO P/DIA', { fill: XL_COR.cabDia, font: { b: 1, sz: 11 } });
-      A.caixa(4, CM, 5, CM, 'MÊS', { fill: XL_COR.cabDia, font: { b: 1, sz: 10 } });
+      A.caixa(2, 1, 3, 1, 'CLIENTE', { font: { b: 1, sz: 10 } });
+      A.caixa(2, 2, 3, 3, 'INDICADORES', { fill: XL_COR.cab, font: { b: 1, sz: 10 } });
+      A.caixa(2, 4, 3, 4, 'META', { fill: XL_COR.cab, font: { b: 1, sz: 10 } });
+      A.caixa(2, C0, 2, CL, 'REALIZADO P/DIA', { fill: XL_COR.cabDia, font: { b: 1, sz: 11 } });
+      A.caixa(2, CM, 3, CM, 'MÊS', { fill: XL_COR.cabDia, font: { b: 1, sz: 10 } });
       const celMesA = `$${XL.colL(CM - 6)}$1`;
       for (let d = 1; d <= 31; d++) {
-        const c = C0 + d - 1, iso = `${mk}-${pad2(d)}`, Lp = XL.colL(c - 1);
-        const f = d === 1 ? MESDATA(celMesA, mk) : `IF(${Lp}5="","",IF(MONTH(${Lp}5+1)=MONTH($${XL.colL(C0)}$5),${Lp}5+1,""))`;
-        A.put(5, c, { f, v: d <= n ? XL.serial(iso) : '' }, { fill: XL_COR.dia, font: { sz: 10 }, fmt: '[$-416]d;@', border: { l: d === 1 ? DMED : DOT, r: d === 31 ? DMED : DOT, t: DMED, b: DMED } });
+        const c = C0 + d - 1, iso = `${mk}-${pad2(d)}`, L = XL.colL(c), Lp = XL.colL(c - 1);
+        const f = d === 1 ? MESDATA(celMesA, mk) : `IF(${Lp}3="","",IF(MONTH(${Lp}3+1)=MONTH($${XL.colL(C0)}$3),${Lp}3+1,""))`;
+        A.put(3, c, { f, v: d <= n ? XL.serial(iso) : '' }, { fill: XL_COR.dia, font: { sz: 10 }, fmt: '[$-416]d;@', border: { l: d === 1 ? DMED : DOT, r: d === 31 ? DMED : DOT, t: DMED, b: DMED } });
       }
       const dxFds = E.dxf('1B1B1F', 'D9D9D9', true);
-      A.cf.push({ sqref: `${XL.colL(C0)}5:${XL.colL(CL)}5`, dxf: dxFds, f: `AND(ISNUMBER(${XL.colL(C0)}5),WEEKDAY(${XL.colL(C0)}5,2)>5)` });
+      A.cf.push({ sqref: `${XL.colL(C0)}3:${XL.colL(CL)}3`, dxf: dxFds, f: `AND(ISNUMBER(${XL.colL(C0)}3),WEEKDAY(${XL.colL(C0)}3,2)>5)` });
       const dxNC = E.dxf('9C0006', 'FFC7CE', true), dxExc = E.dxf('FFFFFF', '1F6F43', true), dxAlta = E.dxf('1F5F3A', 'C6EFCE', true),
         dxAten = E.dxf('9C5700', 'FFEB9C', true), dxBaixa = E.dxf('9C0006', 'FFC7CE', false);
       const valMesCli = (c, k, d) => { const iso = `${mk}-${pad2(d)}`; const b = baseRows.find(x => x.cli === c && x.d === iso); return b && ok(b.vals[k]) ? b.vals[k] : ''; };
-
-      // ---- catálogo de linhas (colunas ocultas à direita): indicador, grupo, coluna da BD, tipo, meta, formato, se o cliente usa ----
-      const MON_KEYS = ORDEM.filter(k => SET_MODO.includes(k)), NIM = MON_KEYS.length, RN = R0 + NIM - 1;
-      const HC0 = CM + 3, hcL = i => XL.colL(HC0 + i), hR = i => `$${hcL(i)}$${R0}:$${hcL(i)}$${RN}`;
-      ['Indicador', 'Grupo', 'Coluna BD', 'Tipo', 'Linha meta', 'Formato', 'Usa?', 'Nº', '', 'Linha →', 'Col BD', 'Tipo', 'Formato', 'Meta']
-        .forEach((h, i) => { if (h) A.put(5, HC0 + i, h, { font: { b: 1, sz: 8, color: '7F7F7F' } }); A.cols[HC0 + i] = [10, 1]; });
-      A.cols[CM + 1] = [2, 1]; A.cols[CM + 2] = [2, 1];
-      const fmtK = k => IND_CAT[k].tipo === 'taxa' ? 'pct' : IND_CAT[k].fmt === '#,##0.0' ? 'dec' : 'int';
-      const mcol = k => `Config!$${XL.colL(4 + BASE_KEYS.indexOf(k))}$${MR0}:$${XL.colL(4 + BASE_KEYS.indexOf(k))}$${MRN}`;
-      const usaF = k => `IF(${CLI}="",0,IF(IFERROR(INDEX(${mcol(k)},MATCH(${CLI},Config!$B$${MR0}:$B$${MRN},0)),"Sim")="Não",0,1))`;
-      const usaJS = MON_KEYS.map(k => cliMon.c ? (appJS(jMon, k) ? 1 : 0) : 0);
-      MON_KEYS.forEach((k, i) => {
-        const rr = R0 + i, ind = IND_CAT[k], st = { font: { sz: 8, color: '7F7F7F' } };
-        A.put(rr, HC0, ind.nome, st); A.put(rr, HC0 + 1, GRUPOS_IND[ind.g].rot, st);
-        A.put(rr, HC0 + 2, BI[k] || 0, st); A.put(rr, HC0 + 3, ind.tipo, st);
-        A.put(rr, HC0 + 4, META_KEYS.indexOf(k) + 1, st); A.put(rr, HC0 + 5, fmtK(k), st);
-        const fU = ind.tipo === 'taxa' ? `MIN(${hcL(6)}${R0 + MON_KEYS.indexOf('occ_disp')},${hcL(6)}${R0 + MON_KEYS.indexOf('occ_ocup')})` : usaF(k);
-        A.put(rr, HC0 + 6, { f: fU, v: usaJS[i] }, st);
-        A.put(rr, HC0 + 7, { f: i ? `${hcL(7)}${rr - 1}+${hcL(6)}${rr}` : `${hcL(6)}${rr}`, v: usaJS.slice(0, i + 1).reduce((a, b) => a + b, 0) }, st);
-      });
-      // ---- linhas visíveis: a i-ésima linha mostra o i-ésimo indicador que o cliente usa ----
-      const visK = MON_KEYS.filter((k, i) => usaJS[i]);
-      const BDALL = `BD!$A$${BASE_R0}:$${XL.colL(B_ULT)}$${BASE_RN}`;
-      const OCUP = BR('occ_ocup'), DISP = BR('occ_disp');
-      const MB = `BD!$${XL.colL(MC1)}$${MH + 1}:$${XL.colL(MCN)}$${MH + META_KEYS.length}`;
-      const stBase = (extra = {}) => Object.assign({ font: { sz: 10 } }, extra);
-      for (let i = 0; i < NIM; i++) {
-        const rr = R0 + i, k = visK[i] || null, ind = k ? IND_CAT[k] : null;
-        A.alt[rr] = 15.75;
-        const IDX = `$${hcL(9)}${rr}`, COLB = `$${hcL(10)}${rr}`, TIPO = `$${hcL(11)}${rr}`, FMT = `$${hcL(12)}${rr}`, MOFF = `$${hcL(13)}${rr}`;
-        const pick = (j, v) => ({ f: `IF(${IDX}=0,"",INDEX(${hR(j)},${IDX}))`, v });
-        A.put(rr, HC0 + 9, { f: `IFERROR(MATCH(${i + 1},${hR(7)},0),0)`, v: k ? MON_KEYS.indexOf(k) + 1 : 0 }, { font: { sz: 8, color: '7F7F7F' } });
-        A.put(rr, HC0 + 10, pick(2, k ? (BI[k] || 0) : ''), { font: { sz: 8, color: '7F7F7F' } });
-        A.put(rr, HC0 + 11, pick(3, k ? ind.tipo : ''), { font: { sz: 8, color: '7F7F7F' } });
-        A.put(rr, HC0 + 12, pick(5, k ? fmtK(k) : ''), { font: { sz: 8, color: '7F7F7F' } });
-        A.put(rr, HC0 + 13, pick(4, k ? META_KEYS.indexOf(k) + 1 : ''), { font: { sz: 8, color: '7F7F7F' } });
-        const bT = i === 0 ? DMED : null, bB = i === NIM - 1 ? DMED : DOT;
-        A.put(rr, 2, pick(1, k ? GRUPOS_IND[ind.g].rot : ''), stBase({ font: { b: 1, sz: 9 }, border: { t: bT, b: bB } }));
-        A.put(rr, 3, pick(0, k ? ind.nome : ''), stBase({ font: { b: 1, sz: 10 }, align: { h: 'left' }, border: { r: DMED, t: bT, b: bB } }));
-        const mv = k && cliMon.c ? metaCliente(cliMon.c, ind.meta) : null;
-        A.put(rr, 4, { f: `IF(OR(${IDX}=0,N(${MOFF})=0),"",IFERROR(1/(1/INDEX(${MB},${MOFF},MATCH(${CLI},${metaCab},0))),""))`, v: mv || '' }, stBase({ font: { b: 1, sz: 10 }, fmt: '#,##0', border: { l: DMED, r: DMED, t: bT, b: bB } }));
-        A.put(rr, 5, undefined, stBase({ border: { t: bT, b: bB } }));
-        const vals = [];
-        for (let d = 1; d <= 31; d++) {
-          const c = C0 + d - 1, L = XL.colL(c), dt = `${L}$5`;
-          const col = `INDEX(${BDALL},0,${COLB})`;
-          const f = `IF(OR(${IDX}=0,${dt}=""),"",IF(${TIPO}="taxa",IF(COUNTIFS(${BD},${dt},${BC},${CLI},${OCUP},"<>")=0,"",IFERROR(SUMIFS(${OCUP},${BD},${dt},${BC},${CLI})/SUMIFS(${DISP},${BD},${dt},${BC},${CLI}),"")),` +
-            `IF(COUNTIFS(${BD},${dt},${BC},${CLI},${col},"<>")=0,"",SUMIFS(${col},${BD},${dt},${BC},${CLI}))))`;
-          let v = '';
-          if (k && d <= n && cliMon.c) {
-            if (ind.tipo === 'taxa') { const o = valMesCli(cliMon.c, 'occ_ocup', d), p = valMesCli(cliMon.c, 'occ_disp', d); v = typeof o === 'number' && typeof p === 'number' && p > 0 ? o / p : ''; }
-            else v = valMesCli(cliMon.c, k, d);
-          }
-          vals.push(v);
-          A.put(rr, c, { f, v }, stBase({ fmt: '#,##0', border: { l: d === 1 ? DMED : DOT, r: d === 31 ? DMED : DOT, t: bT, b: bB } }));
+      let r = 5, depAtual = null;
+      // clientes atuais (como antes) + vagas para novos clientes: blocos com as linhas OCULTAS.
+      // Incluir cliente: desproteger a aba, reexibir as linhas de uma vaga, digitar o nome na coluna CLIENTE
+      // (igual ao da BD) e excluir as linhas dos indicadores que ele não usa. Excluir cliente: ocultar ou excluir as linhas do bloco.
+      const SET_VAGA = MODO === 'TPC' ? SET_TPC : SET_JSL;
+      const blocosMon = clis.map(c => ({ c, vaga: false })).concat(Array.from({ length: Math.max(0, NV - clis.length) }, () => ({ c: null, vaga: true })));
+      let cabVaga = false;
+      blocosMon.forEach(({ c: cli, vaga }) => {
+        if (vaga && !cabVaga) {
+          cabVaga = true;
+          A.alt[r] = 20; A.ocultas.add(r);
+          A.caixa(r, 1, r, CM, 'VAGAS PARA NOVOS CLIENTES — reexiba as linhas de um bloco, digite o nome do cliente na coluna CLIENTE (igual ao da BD) e exclua as linhas que ele não usa', { fill: XL_COR.tinta, font: { b: 1, sz: 11, color: 'FFFFFF' }, align: { h: 'left', indent: 1 } });
+          r++;
         }
-        const fx = `${XL.colL(C0)}${rr}:${XL.colL(CL)}${rr}`, vs = numeros(vals);
-        A.put(rr, CM, { f: `IF(${IDX}=0,"",IF(${TIPO}="fluxo",IF(COUNT(${fx})=0,"",SUM(${fx})),IFERROR(LOOKUP(9.99E+307,${fx}),"")))`, v: !k ? '' : ind.tipo === 'fluxo' ? (vs.length ? soma(vs) : '') : (vs.length ? vs[vs.length - 1] : '') },
-          stBase({ font: { b: 1, sz: 10 }, fmt: '#,##0', border: { l: DMED, r: DMED, t: bT, b: bB } }));
-      }
-      A.caixa(R0, 1, RN, 1, { f: `${CLI}&""`, v: cliMon.nm }, { font: { b: 1, sz: 10 }, align: { wrap: 1 }, border: { t: DMED, b: DMED, l: DMED, r: DMED } });
-      // destaques (prioridade sobre as cores dos grupos): incidente > 0 · taxa de ocupação por faixa
-      const blocoD = `${XL.colL(C0)}${R0}:${XL.colL(CM)}${RN}`, c1 = `${XL.colL(C0)}${R0}`, tipo1 = `$${hcL(11)}${R0}`, nome1 = `$C${R0}`;
-      A.cf.push({ sqref: blocoD, dxf: dxNC, stop: 1, f: `AND(${nome1}="Incidentes",ISNUMBER(${c1}),${c1}>0)` });
-      A.cf.push({ sqref: blocoD, dxf: dxExc, stop: 1, f: `AND(${tipo1}="taxa",ISNUMBER(${c1}),${c1}>1)` });
-      A.cf.push({ sqref: blocoD, dxf: dxAlta, stop: 1, f: `AND(${tipo1}="taxa",ISNUMBER(${c1}),${c1}>=calculos!$B$6)` });
-      A.cf.push({ sqref: blocoD, dxf: dxAten, stop: 1, f: `AND(${tipo1}="taxa",ISNUMBER(${c1}),${c1}>=calculos!$B$5)` });
-      A.cf.push({ sqref: blocoD, dxf: dxBaixa, f: `AND(${tipo1}="taxa",ISNUMBER(${c1}))` });
-      // formato: % na taxa (inclusive meta) · 1 casa em toneladas
-      const blocoF = `D${R0}:${XL.colL(CM)}${RN}`, fmt1 = `$${hcL(12)}${R0}`;
-      A.cf.push({ sqref: blocoF, dxf: E.dxfFmt('0%'), f: `${fmt1}="pct"` });
-      A.cf.push({ sqref: blocoF, dxf: E.dxfFmt('[>=1000]#,##0;#,##0.0'), f: `${fmt1}="dec"` });
-      // cor do grupo na linha (IN, OUT, NC, OCUPAÇÃO, GENTE)
-      Object.keys(GRUPOS_IND).forEach(g => A.cf.push({ sqref: `B${R0}:${XL.colL(CM)}${RN}`, dxf: E.dxfFill(GRUPOS_IND[g].cor), f: `$B${R0}="${GRUPOS_IND[g].rot}"` }));
-      const r = RN + 2;
-      A.put(r, 1, `Cliente e mês: células do topo. Linhas = indicadores marcados "Sim" para o cliente na aba Config (tabela 2). Célula vazia = sem registro. MÊS: soma nos fluxos e NC; último dado em ocupação e efetivo. Taxa = ocupadas ÷ disponíveis (contrato). Ocupação: verde ≥ faixa alta, verde escuro > 100% (excede o contratado), amarelo ≥ faixa de atenção, vermelho abaixo (ociosidade). META: aba BD (tabela de metas).`,
+        if (UNI && !vaga && depC(cli) !== depAtual) {
+          depAtual = depC(cli);
+          A.alt[r] = 20;
+          A.caixa(r, 1, r, CM, `DEPÓSITO ${depAtual}`, { fill: XL_COR.tinta, font: { b: 1, sz: 12, color: 'FFFFFF' }, align: { h: 'left', indent: 1 } });
+          r++; A.alt[r] = 5.25; r++;
+        }
+        const keys = vaga ? SET_VAGA : setCli(cli), r0 = r, nm = vaga ? '' : nomeCli(cli);
+        const rowOf = {}; keys.forEach((k, i) => { rowOf[k] = r0 + i; });
+        const cliRef = `$A$${r0}`;
+        const grupos = [];
+        keys.forEach((k, i) => { const g = grupos[grupos.length - 1], gg = IND_CAT[k].g; if (g && g.g === gg) g.fim = r0 + i; else grupos.push({ g: gg, ini: r0 + i, fim: r0 + i }); });
+        const modal = (baseRows.filter(b => b.cli === cli && b.modal).pop() || {}).modal || '';
+        keys.forEach((k, i) => {
+          const rr = r0 + i, ind = IND_CAT[k], cor = GRUPOS_IND[ind.g].cor;
+          A.alt[rr] = 15.75;
+          const g = grupos.find(x => rr >= x.ini && rr <= x.fim), topo = rr === g.ini, base = rr === g.fim;
+          const bT = topo ? DMED : null, bB = base ? DMED : null;
+          const st = (extra = {}) => Object.assign({ fill: cor, font: { sz: 10 } }, extra);
+          const fmtD = ind.tipo === 'taxa' ? '0%' : ind.fmt === '#,##0.0' ? '[>=1000]#,##0;#,##0.0' : ind.fmt;
+          A.put(rr, 3, ind.nome, st({ font: { b: 1, sz: 10 }, border: { r: DMED, t: bT, b: bB } }));
+          A.put(rr, 4, { f: `IFERROR(1/(1/INDEX(${metaLinha(k)},MATCH(${cliRef},${metaCab},0))),"")`, v: (cli && metaCliente(cli, ind.meta)) || '' }, st({ font: { b: 1, sz: 10 }, fmt: ind.tipo === 'taxa' ? '0%' : '#,##0', border: { l: DMED, r: DMED, t: bT, b: bB } }));
+          A.put(rr, 5, undefined, st({ border: { t: bT, b: bB } }));
+          const vals = [];
+          for (let d = 1; d <= 31; d++) {
+            const c = C0 + d - 1, L = XL.colL(c), borda = { l: d === 1 ? DMED : DOT, r: d === 31 ? DMED : DOT, t: topo ? DMED : null, b: base ? DMED : DOT };
+            let f, v;
+            if (ind.tipo === 'taxa') {
+              const cd = `${L}${rowOf.occ_disp}`, co = `${L}${rowOf.occ_ocup}`;
+              f = `IF(AND(ISNUMBER(${cd}),ISNUMBER(${co})),IF(${cd}>0,${co}/${cd},""),"")`;
+              const vd = d <= n ? valMesCli(cli, 'occ_disp', d) : '', vo = d <= n ? valMesCli(cli, 'occ_ocup', d) : '';
+              v = typeof vd === 'number' && typeof vo === 'number' && vd > 0 ? vo / vd : '';
+            } else {
+              const col = BR(k);
+              f = `IF(${L}$3="","",IF(COUNTIFS(${BD},${L}$3,${BC},${cliRef},${col},"<>")=0,"",SUMIFS(${col},${BD},${L}$3,${BC},${cliRef})))`;
+              v = d <= n ? valMesCli(cli, k, d) : '';
+            }
+            vals.push(v);
+            A.put(rr, c, { f, v }, st({ fmt: fmtD, border: borda }));
+          }
+          const fx = `${XL.colL(C0)}${rr}:${XL.colL(CL)}${rr}`, vs = numeros(vals);
+          const stM = st({ font: { b: 1, sz: 10 }, fmt: fmtD, border: { l: DMED, r: DMED, t: topo ? DMED : null, b: base ? DMED : DOT } });
+          if (ind.tipo === 'fluxo') A.put(rr, CM, { f: `IF(COUNT(${fx})=0,"",SUM(${fx}))`, v: vs.length ? soma(vs) : '' }, stM);
+          else if (ind.tipo === 'taxa') {
+            const md = `${XL.colL(CM)}${rowOf.occ_disp}`, mo = `${XL.colL(CM)}${rowOf.occ_ocup}`;
+            A.put(rr, CM, { f: `IF(AND(ISNUMBER(${md}),ISNUMBER(${mo})),IF(${md}>0,${mo}/${md},""),"")`, v: vs.length ? vs[vs.length - 1] : '' }, stM);
+          } else if (ind.tipo === 'disp') {
+            A.put(rr, CM, { f: `IF(COUNT(${fx})>0,LOOKUP(9.99E+307,${fx}),IFERROR(IF(INDEX(${colR(B_MOD)},MATCH(${cliRef},${BC},0))&""="Contrato","",INDEX(${colR(B_MOD)},MATCH(${cliRef},${BC},0))&""),""))`, v: vs.length ? vs[vs.length - 1] : (modal && modal !== 'Contrato' ? modal : '') }, stM);
+          } else A.put(rr, CM, { f: `IFERROR(LOOKUP(9.99E+307,${fx}),"")`, v: vs.length ? vs[vs.length - 1] : '' }, stM);
+          if (k === 'nc_inc') A.cf.push({ sqref: fx, dxf: dxNC, f: `AND(ISNUMBER(${XL.colL(C0)}${rr}),${XL.colL(C0)}${rr}>0)` });
+          if (ind.tipo === 'taxa') {
+            const c1 = `${XL.colL(C0)}${rr}`;
+            const sq = `${fx} ${XL.colL(CM)}${rr}`;
+            A.cf.push({ sqref: sq, dxf: dxExc, stop: 1, f: `AND(ISNUMBER(${c1}),${c1}>1)` });
+            A.cf.push({ sqref: sq, dxf: dxAlta, stop: 1, f: `AND(ISNUMBER(${c1}),${c1}>=calculos!$B$6)` });
+            A.cf.push({ sqref: sq, dxf: dxAten, stop: 1, f: `AND(ISNUMBER(${c1}),${c1}>=calculos!$B$5)` });
+            A.cf.push({ sqref: sq, dxf: dxBaixa, f: `ISNUMBER(${c1})` });
+          }
+        });
+        grupos.forEach(g => A.caixa(g.ini, 2, g.fim, 2, GRUPOS_IND[g.g].rot, { fill: GRUPOS_IND[g.g].cor, font: { b: 1, sz: 10 } }));
+        A.caixa(r0, 1, r0 + keys.length - 1, 1, nm, { font: { b: 1, sz: 9 }, align: { wrap: 1 } });
+        if (vaga) for (let x = r0; x <= r0 + keys.length; x++) A.ocultas.add(x);
+        r = r0 + keys.length; A.alt[r] = 13.5; r++;
+      });
+      A.put(r, 1, `Mês / ano: filtro na célula vermelha do canto superior direito. Célula vazia = sem registro. MÊS: soma nos fluxos e NC; último dado em ocupação e efetivo. Taxa = ocupadas ÷ disponíveis (contrato). Ocupação: verde ≥ ${Math.round(CFG.critico * 100)}% (alta, boa notícia), verde escuro > 100% (excede o contratado), amarelo ${Math.round(CFG.atencao * 100)}–${Math.round(CFG.critico * 100)}% (média), vermelho < ${Math.round(CFG.atencao * 100)}% (ociosidade). Incidente > 0 em vermelho. META: ${VAZIO ? 'aba BD (tabela de metas).' : 'preenchida a partir de meta.metas do Power Automate, quando houver.'}`,
         { font: { i: 1, sz: 8, color: '7F7F7F' }, align: { h: 'left' } });
       A.areaImp = `$A$1:$${XL.colL(CM)}$${r}`;
 
