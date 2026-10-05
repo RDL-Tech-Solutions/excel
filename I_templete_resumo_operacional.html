@@ -1837,6 +1837,87 @@
       return { inb, out, occ };
     }
 
+    // ── Formato "tabela do Excel" (tbBaseJSL / tbBaseTPC + tbMetasJSL / tbMetasTPC) ──
+    // Mesmas colunas da aba BD: Data, Cliente (nome como na Config), IN ..., OUT ..., NC ..., Posições, Gente, Modalidade.
+    const NOMES_PADRAO = { 'BARRY': 'Barry Callebaut', 'NESTLE': 'Nestlé', 'MONDELEZ': 'Mondelez', 'PMB': 'PMB', 'GM': 'GM',
+      'BASF': 'Basf', 'BEAUTYBIZ': 'Beautybiz', 'BOTICÁRIO': 'Boticário', 'BOTICARIO': 'Boticário', 'SUPPLY': 'Supply',
+      'GE VERNOVA': 'GE Vernova', 'VESTAS': 'Vestas', 'VEDACIT': 'Vedacit', 'OMNLIFE': 'Omnilife', 'OMNILIFE': 'Omnilife', 'CONFIANCE': 'Confiance', 'ALPARGATAS': 'Alpargatas' };
+    const NOMES_LIDOS = {};                            // clientes novos: código → nome como veio na tabela
+    const COD_POR_NOME = {};
+    Object.keys(NOMES_PADRAO).forEach(c => { [NOMES_PADRAO[c], c].forEach(nm => { const k = chave(nm); if (!COD_POR_NOME[k]) COD_POR_NOME[k] = c; }); });
+    function codCliente(nome) {
+      const nm = String(nome || '').trim();
+      if (!nm) return '';
+      const c = COD_POR_NOME[chave(nm)];
+      if (c) return c;
+      const cod = semAcento(nm).toUpperCase();
+      if (!NOMES_LIDOS[cod]) NOMES_LIDOS[cod] = nm;
+      return cod;
+    }
+    // Uma linha da tbBase → { inb, out, occ, gen } (NC no IN; Gente em lista própria)
+    function normalizaBase(row, depPadrao) {
+      if (!row || typeof row !== 'object') return null;
+      const m = mapa(row);
+      const d = dataISO(campo(m, 'data'));
+      const cli = codCliente(campo(m, 'cliente'));
+      if (!d || !cli) return null;                      // linhas em branco da tabela
+      const n = (...k) => numOuNulo(campo(m, ...k));
+      const dep = depDe(m, depPadrao);
+      const obs = String(campo(m, 'obs', 'observacao') || '').trim();
+      const base = { d, cli, dep, kg: null, obs, inc: null, incDesc: '', incTipo: '', incGrav: '', efe: null,
+        noshow: null, backlog: null, bkc: null, absh: null, falta: null, folga: null, ferias: null, desl: null, dsv: null, caf: null, saf: null,
+        cx: null, ped: null, pfat: null, itn: null, pec: null, lnf: null, icm: null, cxf: null, cxm: null, bag: null };
+      const inb = Object.assign({}, base, {
+        vei: n('inveiculosrecebidos'), pal: n('inpalletsmovimentados'), ton: n('intoneladasmovimentadas'),
+        cx: n('incaixasrecebidas', 'incaixasmovimentadas'), bag: n('inbagsrecebidos'), lnf: n('inlinhasnf'),
+        itn: n('initensrecebidos'), icm: n('initensrecebidoscxmista'), cxf: n('incaixasfechadas'), cxm: n('incaixasmistasrecebidas'),
+        inc: n('ncincidentes', 'incidentes'), noshow: n('ncnoshow', 'noshow'), backlog: n('ncbacklogintralog', 'ncbacklog'), bkc: n('ncbacklogcliente')
+      });
+      const out = Object.assign({}, base, {
+        vei: n('outveiculosexpedidos'), pal: n('outpalletsmovimentados'), ton: n('outtoneladasmovimentadas'),
+        cx: n('outcaixasexpedidas'), ped: n('outpedidosexpedidos'), pfat: n('outpedidosfaturados'), itn: n('outitensexpedidos'),
+        lnf: n('outlinhasnf'), bag: n('outbagsexpedidos')
+      });
+      if (dep === 'JSL' && out.ped === null) out.ped = out.pfat;   // JSL: painel do HTML usa "pedidos" = pedidos faturados
+      [inb, out].forEach(r => { r.reg = [r.vei, r.pal, r.ton, r.cx, r.ped, r.pfat, r.itn, r.lnf, r.bag, r.icm, r.cxf, r.cxm].some(v => v !== null); });
+      if (!inb.reg && [inb.inc, inb.noshow, inb.backlog, inb.bkc].some(v => v !== null)) inb.reg = true;   // dia só com NC
+      const gen = { d, cli, dep, obs: '',
+        efe: n('efetivoop', 'efetivo'), falta: n('falta', 'faltas'), absh: n('absenteismohh', 'absenteismoh', 'absenteismo'),
+        folga: n('folga', 'folgas'), ferias: n('ferias'), desl: n('desligamento', 'desligamentos'),
+        dsv: n('desvioscomportamentais', 'desvios'), caf: n('acidentescaf'), saf: n('acidentessaf') };
+      const temGen = ['efe', 'falta', 'absh', 'folga', 'ferias', 'desl', 'dsv', 'caf', 'saf'].some(k => gen[k] !== null);
+      const disp = n('posicoesdisponiveis', 'posicoescontratadas'), ocup = n('posicoesocupadas');
+      const modal = String(campo(m, 'modalidade') || '').trim().toUpperCase();
+      const contrato = disp && disp > 0 ? disp : null;
+      const occ = ocup !== null || contrato || modal
+        ? { d, cli, dep, contrato, tipo: contrato ? 'CONTRATO' : (modal || null), ocup, taxa: ocup === null || !contrato ? null : ocup / contrato, taxaPlan: null, obs: '' }
+        : null;
+      return { inb, out, occ, gen: temGen ? gen : null };
+    }
+    // tbMetas: Indicador ("IN · Veículos Recebidos") × colunas Todos / Depósito X / clientes / Vaga N
+    function metasDeTabela(lista, dep, unica) {
+      const metas = {};
+      (Array.isArray(lista) ? lista : []).forEach(row => {
+        if (!row || typeof row !== 'object') return;
+        const rot = String(row.Indicador || row.INDICADOR || row.indicador || '').trim();
+        if (!rot) return;
+        const pt = rot.split('·'), g = chave(pt.length > 1 ? pt[0] : ''), nm = chave(pt[pt.length - 1]);
+        const alvo = (g === 'in' || g === 'out') ? g + nm : nm;
+        const k = Object.keys(MAPA_META_CLIENTE).find(x => MAPA_META_CLIENTE[x].includes(alvo));
+        if (!k) return;
+        for (const col in row) {
+          const kc = chave(col);
+          if (['indicador', 'odataetag', 'iteminternalid'].includes(kc) || /^vaga\d+$/.test(kc)) continue;
+          const v = numOuNulo(row[col]);
+          if (v === null) continue;
+          if (kc === 'todos') { if (unica) metas[k] = v; else (metas[dep] || (metas[dep] = {}))[k] = v; continue; }
+          const alvoCli = /^deposito/.test(kc) ? String(col).replace(/^dep[oó]sito\s*/i, '').trim().toUpperCase() : codCliente(col);
+          (metas[alvoCli] || (metas[alvoCli] = {}))[k] = v;
+        }
+      });
+      return metas;
+    }
+
     // Lista "metaCliente" (JSL): uma linha por CLIENTE com as metas do mês por indicador.
     // Convertida para o formato meta.metas.<CLIENTE> = { in_veiculos, out_pallets, ocupacao, ... }.
     // "N/A" ou vazio = sem meta para aquele indicador.
@@ -1853,6 +1934,13 @@
       out_pallets: ['outpalletsmovimentados', 'palletsmovimentadosout', 'outpallets'],
       out_toneladas: ['outtoneladasmovimentadas', 'toneladasmovimentadasout', 'outtoneladas'],
       out_caixas: ['outcaixasexpedidas', 'caixasexpedidas', 'outexpedicoesdecaixas', 'outcaixas'],
+      in_linhasnf: ['inlinhasnf', 'linhasnfin'],
+      in_itens: ['initensrecebidos', 'itensrecebidos'],
+      in_itenscxmista: ['initensrecebidoscxmista', 'itensrecebidoscxmista'],
+      in_caixasfechadas: ['incaixasfechadas', 'caixasfechadas'],
+      in_caixasmistas: ['incaixasmistasrecebidas', 'caixasmistasrecebidas'],
+      out_itens: ['outitensexpedidos', 'itensexpedidos'],
+      out_linhasnf: ['outlinhasnf', 'linhasnfout'],
       nc_max: ['incidentes', 'ncincidentes', 'ncmax'],
       noshow: ['noshow', 'ncnoshow'],
       backlog: ['backlogintralog', 'backlog', 'ncbacklog'],
@@ -1889,6 +1977,14 @@
     function montarMeta(pa) {
       const meta = Object.assign({}, pa.meta || {});
       const porCliente = metasDeMetaCliente(pa.metaCliente);
+      const tbs = Object.keys(pa).filter(k => /^tbmetas/i.test(k) && Array.isArray(pa[k]));
+      tbs.forEach(k => {
+        const mt = metasDeTabela(pa[k], k.slice(7).toUpperCase() || 'JSL', tbs.length === 1);
+        for (const c in mt) {
+          if (typeof mt[c] === 'object') porCliente[c] = Object.assign(porCliente[c] || {}, mt[c]);
+          else meta.metas = Object.assign({}, meta.metas || {}, { [c]: mt[c] });
+        }
+      });
       if (Object.keys(porCliente).length) {
         const metas = Object.assign({}, (meta.metas && typeof meta.metas === 'object') ? meta.metas : {});
         for (const cli in porCliente) metas[cli] = Object.assign({}, metas[cli] && typeof metas[cli] === 'object' ? metas[cli] : {}, porCliente[cli]);
@@ -1909,7 +2005,14 @@
         (Array.isArray(pa.tpc) ? pa.tpc : []).map(normalizaTPC).filter(Boolean).forEach(t => {
           inbound.push(t.inb); outbound.push(t.out); if (t.occ) ocupacao.push(t.occ);
         });
-        [inbound, outbound, ocupacao].forEach(l => l.sort(ordena));
+        // tabelas do Excel: tbBaseJSL / tbBaseTPC (tbBase sem sufixo = pasta unificada, usa a coluna Depósito)
+        Object.keys(pa).filter(k => /^tbbase/i.test(k) && Array.isArray(pa[k])).forEach(k => {
+          const dp = k.slice(6).toUpperCase() || 'JSL';
+          pa[k].map(r => normalizaBase(r, dp)).filter(Boolean).forEach(t => {
+            inbound.push(t.inb); outbound.push(t.out); if (t.occ) ocupacao.push(t.occ); if (t.gen) gente.push(t.gen);
+          });
+        });
+        [inbound, outbound, ocupacao, gente].forEach(l => l.sort(ordena));
         if (inbound.length || outbound.length || ocupacao.length) {
           return { inbound, outbound, ocupacao, incidentes, gente, meta: montarMeta(pa), origem: 'power-automate' };
         }
@@ -1969,9 +2072,7 @@
       capFonte: capInf.fonte,
       metas: (META.metas && typeof META.metas === 'object') ? META.metas : {}
     };
-    const NOMES = Object.assign({ 'BARRY': 'Barry Callebaut', 'NESTLE': 'Nestlé', 'MONDELEZ': 'Mondelez', 'PMB': 'PMB', 'GM': 'GM',
-      'BASF': 'Basf', 'BEAUTYBIZ': 'Beautybiz', 'BOTICÁRIO': 'Boticário', 'BOTICARIO': 'Boticário', 'SUPPLY': 'Supply',
-      'GE VERNOVA': 'GE Vernova', 'VESTAS': 'Vestas', 'VEDACIT': 'Vedacit', 'OMNLIFE': 'Omnilife', 'OMNILIFE': 'Omnilife', 'CONFIANCE': 'Confiance', 'ALPARGATAS': 'Alpargatas' }, META.nomesClientes || {});
+    const NOMES = Object.assign({}, NOMES_PADRAO, NOMES_LIDOS, META.nomesClientes || {});
     // depósito de cada cliente (primeiro registro encontrado)
     const DEP_CLI = {};
     [DADOS.inbound, DADOS.outbound, DADOS.ocupacao, DADOS.gente || []].forEach(l => l.forEach(r => { if (!DEP_CLI[r.cli]) DEP_CLI[r.cli] = r.dep; }));
@@ -5573,7 +5674,26 @@ $('out-tudo')?.addEventListener('click', () => {
   ══════════════════════════════════════════════════════════════════════
   ESQUEMA DO JSON ESPERADO PELO MARCADOR DO POWER AUTOMATE
   ══════════════════════════════════════════════════════════════════════
-  Objeto com quatro listas (linhas da planilha, uma por dia × cliente) e meta.
+  FORMATO ATUAL (tabelas do próprio Excel, uma lista por tabela):
+  {
+    "meta": { "updatedAt": "2026-10-05T11:33:05" },
+    "tbBaseJSL":  [ { "Data": "46266", "Cliente": "Barry Callebaut", "IN Veículos Recebidos": "0", ...,
+                      "Efetivo Op_x002e_": "", ..., "Modalidade": "Contrato" } ],
+    "tbMetasJSL": [ { "Indicador": "IN · Veículos Recebidos", "Todos": "", "Barry Callebaut": "5", "GM": "", ...,
+                      "Vaga 6": "" } ],
+    "tbBaseTPC":  [ ... mesmas colunas da aba BD da TPC ... ],
+    "tbMetasTPC": [ ... mesmo modelo da tbMetasJSL ... ]
+  }
+  tbBase<DEP>: colunas iguais às da aba BD (Data, Cliente, IN ..., OUT ..., NC ..., Posições Disponíveis,
+  Posições Ocupadas, Efetivo Op., Falta, Absenteísmo (H/H), Folga, Férias, Desligamento, Desvios
+  Comportamentais, Acidentes CAF, Acidentes SAF, Modalidade). O depósito vem do nome da lista
+  (tbBaseJSL = JSL, tbBaseTPC = TPC). Cliente pelo nome da Config ("Barry Callebaut", "Nestlé"...);
+  cliente novo entra com o nome como veio. Linhas sem Data ou Cliente são ignoradas.
+  tbMetas<DEP>: uma linha por indicador ("GRUPO · Indicador"); colunas Todos (meta geral), clientes
+  (pelo nome) e "Vaga N" (ignoradas). Vazio ou "N/A" = sem meta.
+  As listas antigas abaixo (inbound/outbound/ocupacao/gente/tpc/metaCliente) continuam aceitas.
+
+  FORMATO ANTIGO — objeto com quatro listas (linhas da planilha, uma por dia × cliente) e meta.
   Nomes de coluna são tolerantes: acento, espaço, ponto e _x002e_ são ignorados.
   Célula vazia = "sem registro" (aparece como —). DATA: série do Excel,
   AAAA-MM-DD ou DD/MM/AAAA (ou colunas DIA + MES + ANO).
