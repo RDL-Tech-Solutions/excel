@@ -1716,6 +1716,8 @@
         vei: numOuNulo(campo(m, 'quantveiculos', 'quantveiculo', 'veiculos')),
         pal: numOuNulo(campo(m, 'quantpallet', 'quantpallets', 'pallets', 'paletes')),
         ped: numOuNulo(campo(m, 'quantpedidos', 'pedidos', 'pedidosfaturados')),
+        pfat: numOuNulo(campo(m, 'quantpedidosfaturados', 'pedidosfaturados', 'quantpedidos', 'pedidos')),
+        bag: numOuNulo(campo(m, 'quantbags', 'quantbag', 'bags', 'bag', 'bigbags')),
         efe: numOuNulo(campo(m, 'efetivoop', 'efetivo', 'efetivooperacional')),
         obs: String(campo(m, 'obs', 'observacao') || '').trim(),
         inc: null, incDesc: '',
@@ -1738,7 +1740,7 @@
         if (n !== null) r.inc = n; else { r.inc = 1; r.incDesc = String(incRaw).trim(); }
       }
       // "registro" = a linha do dia foi preenchida (toneladas/kg costumam ser fórmula e vêm "0")
-      r.reg = [r.vei, r.cx, r.pal, r.ped].some(v => v !== null);
+      r.reg = [r.vei, r.cx, r.pal, r.ped, r.bag].some(v => v !== null);
       return r;
     }
     function normalizaOcupacao(row) {
@@ -1838,12 +1840,15 @@
       in_veiculos: ['inveiculosrecebidos', 'veiculosrecebidosin', 'inveiculos'],
       in_pallets: ['inpalletsmovimentados', 'palletsmovimentadosin', 'inpallets'],
       in_toneladas: ['intoneladasmovimentadas', 'toneladasmovimentadasin', 'intoneladas'],
-      in_caixas: ['incaixasmovimentadas', 'caixasmovimentadasin', 'incaixas'],
+      in_caixas: ['incaixasrecebidas', 'incaixasmovimentadas', 'caixasmovimentadasin', 'caixasrecebidas', 'incaixas'],
+      in_bags: ['inbagsrecebidos', 'bagsrecebidos', 'inbags'],
+      out_bags: ['outbagsexpedidos', 'bagsexpedidos', 'outbags'],
+      out_pedidosfaturados: ['outpedidosfaturados', 'pedidosfaturados'],
       out_veiculos: ['outveiculosexpedidos', 'veiculosexpedidos', 'outveiculos'],
       out_pedidos: ['outpedidosexpedidos', 'pedidosexpedidos', 'outpedidos'],
       out_pallets: ['outpalletsmovimentados', 'palletsmovimentadosout', 'outpallets'],
       out_toneladas: ['outtoneladasmovimentadas', 'toneladasmovimentadasout', 'outtoneladas'],
-      out_caixas: ['outcaixasexpedidas', 'caixasexpedidas', 'outcaixas'],
+      out_caixas: ['outcaixasexpedidas', 'caixasexpedidas', 'outexpedicoesdecaixas', 'outcaixas'],
       nc_max: ['incidentes', 'ncincidentes', 'ncmax'],
       noshow: ['noshow', 'ncnoshow'],
       backlog: ['backlog', 'ncbacklog'],
@@ -3779,6 +3784,8 @@ $('out-tudo')?.addEventListener('click', () => {
         in_ton: I('IN', 'Toneladas Movimentadas', 'IN Toneladas Movimentadas', 'fluxo', 'maior', '#,##0.0', 'in_toneladas', 'toneladas', fi('ton')),
         in_lnf: I('IN', 'Linhas NF', 'IN Linhas NF', 'fluxo', 'maior', '#,##0', 'in_linhasnf', 'linhas NF', fi('lnf')),
         in_cx: I('IN', 'Caixas Movimentadas', 'IN Caixas Movimentadas', 'fluxo', 'maior', '#,##0', 'in_caixas', 'caixas', fi('cx')),
+        in_cxr: I('IN', 'Caixas Recebidas', 'IN Caixas Recebidas', 'fluxo', 'maior', '#,##0', 'in_caixas', 'caixas', fi('cx')),      // JSL
+        in_bag: I('IN', 'Bags Recebidos', 'IN Bags Recebidos', 'fluxo', 'maior', '#,##0', 'in_bags', 'bags', fi('bag')),             // JSL (Barry)
         in_pec: I('IN', 'Peças Movimentadas', 'IN Peças Movimentadas', 'fluxo', 'maior', '#,##0', 'in_pecas', 'peças', fi('pec')),
         in_itn: I('IN', 'Itens Recebidos', 'IN Itens Recebidos', 'fluxo', 'maior', '#,##0', 'in_itens', 'itens', fi('itn')),
         in_icm: I('IN', 'Itens Recebidos CX Mista', 'IN Itens Recebidos CX Mista', 'fluxo', 'maior', '#,##0', 'in_itenscxmista', 'itens cx mista', fi('icm')),
@@ -3791,6 +3798,7 @@ $('out-tudo')?.addEventListener('click', () => {
         out_pec: I('OUT', 'Peças Movimentadas', 'OUT Peças Movimentadas', 'fluxo', 'maior', '#,##0', 'out_pecas', 'peças', fo('pec')),
         out_lnf: I('OUT', 'Linhas NF', 'OUT Linhas NF', 'fluxo', 'maior', '#,##0', 'out_linhasnf', 'linhas NF', fo('lnf')),
         out_cx: I('OUT', 'Caixas Expedidas', 'OUT Caixas Expedidas', 'fluxo', 'maior', '#,##0', 'out_caixas', 'caixas', fo('cx')),
+        out_bag: I('OUT', 'Bags Expedidos', 'OUT Bags Expedidos', 'fluxo', 'maior', '#,##0', 'out_bags', 'bags', fo('bag')),        // JSL (Barry)
         out_pal: I('OUT', 'Pallets Movimentados', 'OUT Pallets Movimentados', 'fluxo', 'maior', '#,##0', 'out_pallets', 'pallets', fo('pal')),
         out_ton: I('OUT', 'Toneladas Movimentadas', 'OUT Toneladas Movimentadas', 'fluxo', 'maior', '#,##0.0', 'out_toneladas', 'toneladas', fo('ton')),
         nc_inc: I('NC', 'Incidentes', 'NC Incidentes', 'fluxo', 'menor', '#,##0', 'nc_max', 'incidentes', v => v.nc),
@@ -3809,7 +3817,8 @@ $('out-tudo')?.addEventListener('click', () => {
         gen_saf: I('GEN', 'Acidentes SAF', 'Acidentes SAF', 'fluxo', 'menor', '#,##0', 'acidentes_saf', 'acidentes SAF', v => v.saf)
       };
     })();
-    const SET_JSL = ['in_vei', 'in_pal', 'in_ton', 'out_vei', 'out_pal', 'out_ton', 'nc_inc', 'nc_ns', 'nc_bkl',
+    // JSL: caixas recebidas (IN), caixas expedidas e pedidos faturados (OUT); bags só para quem está em COM_IND_JSL
+    const SET_JSL = ['in_vei', 'in_pal', 'in_ton', 'in_cxr', 'in_bag', 'out_vei', 'out_pal', 'out_ton', 'out_cx', 'out_pfat', 'out_bag', 'nc_inc', 'nc_ns', 'nc_bkl',
       'occ_disp', 'occ_ocup', 'occ_tx', 'gen_efe', 'gen_fal', 'gen_fol', 'gen_fer', 'gen_des', 'gen_dsv', 'gen_caf', 'gen_saf'];
     // (Peças Movimentadas IN/OUT saíram da TPC)
     const SET_TPC = ['in_vei', 'in_pal', 'in_ton', 'in_lnf', 'in_cx', 'in_itn', 'in_icm', 'in_cxf', 'in_cxm',
@@ -3834,23 +3843,25 @@ $('out-tudo')?.addEventListener('click', () => {
     // JSL: indicadores que o cliente não tem/não utiliza (saem do Monitoramento do HTML e das abas
     // Monitoramento e Consol Mensal do Excel). GM: sem IN e sem Ocupação · Mondelez (CROSS) e
     // Nestlé (SPOT): sem Posições Disponíveis e Taxa de Ocupação (fica só Posições Ocupadas).
+    const IND_JSL_OPC = ['in_bag', 'out_bag'];
+    const COM_IND_JSL = { 'BARRY': ['in_bag', 'out_bag'] };
     const SEM_IND_JSL = {
-      'GM': ['in_vei', 'in_pal', 'in_ton', 'occ_disp', 'occ_ocup', 'occ_tx'],
+      'GM': ['in_vei', 'in_pal', 'in_ton', 'in_cxr', 'occ_disp', 'occ_ocup', 'occ_tx'],
       'MONDELEZ': ['occ_disp', 'occ_tx'],
       'NESTLE': ['occ_disp', 'occ_tx']
     };
     SEM_IND_JSL['NESTLÉ'] = SEM_IND_JSL['NESTLE'];
     // ── Dashboard do Excel: perfil por cliente (linhas de apoio dos cards IN/OUT e gráficos 2 e 3) ──
-    const IND_EXTRA_DASH = ['in_lnf', 'in_cx', 'in_pec', 'in_itn', 'in_icm', 'in_cxf', 'in_cxm',
-      'out_ped', 'out_pfat', 'out_itn', 'out_pec', 'out_lnf', 'out_cx'];
+    const IND_EXTRA_DASH = ['in_lnf', 'in_cx', 'in_cxr', 'in_bag', 'in_pec', 'in_itn', 'in_icm', 'in_cxf', 'in_cxm',
+      'out_ped', 'out_pfat', 'out_itn', 'out_pec', 'out_lnf', 'out_cx', 'out_bag'];
     const ROTULO_DASH = {
-      in_pal: 'pallets movimentados', in_ton: 't movimentadas', in_lnf: 'linhas NF', in_cx: 'caixas movimentadas', in_pec: 'peças movimentadas',
+      in_pal: 'pallets movimentados', in_ton: 't movimentadas', in_lnf: 'linhas NF', in_cx: 'caixas movimentadas', in_cxr: 'caixas recebidas', in_bag: 'bags recebidos', in_pec: 'peças movimentadas',
       in_itn: 'itens recebidos', in_icm: 'itens cx mista', in_cxf: 'caixas fechadas', in_cxm: 'caixas mistas',
       out_pal: 'pallets movimentados', out_ton: 't movimentadas', out_ped: 'pedidos expedidos', out_pfat: 'pedidos faturados',
-      out_itn: 'itens expedidos', out_pec: 'peças movimentadas', out_lnf: 'linhas NF', out_cx: 'caixas expedidas'
+      out_itn: 'itens expedidos', out_pec: 'peças movimentadas', out_lnf: 'linhas NF', out_cx: 'caixas expedidas', out_bag: 'bags expedidos'
     };
-    const FAM_DASH = { pal: 'pal', ton: 'ton', lnf: 'lnf', cx: 'cx', cxm: 'cx', cxf: 'cx', itn: 'itn', icm: 'itn', pec: 'pec', ped: 'ped', pfat: 'ped' };
-    const FAM_TIT = { pal: 'PALETES', ton: 'TONS', lnf: 'LINHAS NF', cx: 'CAIXAS', itn: 'ITENS', pec: 'PEÇAS', ped: 'PEDIDOS' };
+    const FAM_DASH = { pal: 'pal', ton: 'ton', lnf: 'lnf', cx: 'cx', cxr: 'cx', cxm: 'cx', cxf: 'cx', bag: 'bag', itn: 'itn', icm: 'itn', pec: 'pec', ped: 'ped', pfat: 'ped' };
+    const FAM_TIT = { pal: 'PALETES', ton: 'TONS', lnf: 'LINHAS NF', cx: 'CAIXAS', itn: 'ITENS', pec: 'PEÇAS', ped: 'PEDIDOS', bag: 'BAGS' };
     // c = código do cliente (null = Todos / depósito) · IX = indicadores disponíveis na exportação
     // Itens de card/gráfico: { k, div } — div = divisor (veículos) para "por veículo"; null = valor direto.
     // Cliente com um só indicador de volume: o 2º card/gráfico vira "<volume> por veículo" (IN × OUT, mesmo padrão).
@@ -3862,7 +3873,7 @@ $('out-tudo')?.addEventListener('click', () => {
         const set = setDoCliente(c);
         ins = set.filter(k => k.startsWith('in_') && k !== 'in_vei');
         outs = set.filter(k => k.startsWith('out_') && k !== 'out_vei');
-        const proprio = !!IO_TPC[String(c).trim().toUpperCase()];           // perfil próprio (monitoramento do cliente)
+        const proprio = !!IO_TPC[String(c).trim().toUpperCase()] || depDoCliente(c) !== 'TPC';   // perfil próprio (monitoramento do cliente / JSL)
         if (!proprio && ins.length > 3) ins = padrao.in.filter(k => set.includes(k));
         if (!proprio && outs.length > 3) outs = padrao.out.filter(k => set.includes(k));
       }
@@ -3898,7 +3909,10 @@ $('out-tudo')?.addEventListener('click', () => {
     // indicadores de cada cliente: JSL = padrão JSL (menos SEM_IND_JSL) · TPC = IN/OUT do cliente + NC, Ocupação e GENTE padrão
     function setDoCliente(c) {
       const cu = String(c).trim().toUpperCase();
-      if (depDoCliente(c) !== 'TPC') { const fora = SEM_IND_JSL[cu]; return fora ? SET_JSL.filter(k => !fora.includes(k)) : SET_JSL; }
+      if (depDoCliente(c) !== 'TPC') {
+        const fora = SEM_IND_JSL[cu] || [], com = COM_IND_JSL[cu] || [];
+        return SET_JSL.filter(k => !fora.includes(k) && (!IND_JSL_OPC.includes(k) || com.includes(k)));
+      }
       const io = IO_TPC[cu];
       return io ? io.concat(SET_COMUM) : SET_TPC;
     }
@@ -3914,7 +3928,7 @@ $('out-tudo')?.addEventListener('click', () => {
         const reg = rows.filter(r => r.reg);
         if (!reg.length) return null;
         const s = k => reg.reduce((a, r) => a + (ok(r[k]) ? r[k] : 0), 0), sn = k => somaNula(reg, k);
-        return { vei: s('vei'), pal: s('pal'), ton: s('ton'), cx: sn('cx'), ped: sn('ped'), pfat: sn('pfat'), itn: sn('itn'), pec: sn('pec'), lnf: sn('lnf'), icm: sn('icm'), cxf: sn('cxf'), cxm: sn('cxm') };
+        return { vei: s('vei'), pal: s('pal'), ton: s('ton'), cx: sn('cx'), ped: sn('ped'), pfat: sn('pfat'), itn: sn('itn'), pec: sn('pec'), lnf: sn('lnf'), icm: sn('icm'), cxf: sn('cxf'), cxm: sn('cxm'), bag: sn('bag') };
       };
       const fin = fx(rin), fout = fx(rout);
       let efe = somaNula(rgen, 'efe'); if (efe === null) efe = somaNula(rin, 'efe'); if (efe === null) efe = somaNula(rout, 'efe');
@@ -4056,7 +4070,7 @@ $('out-tudo')?.addEventListener('click', () => {
         ['COMO PREENCHER A BD', 1], ['• Uma linha por dia e por cliente.'], ['• Digite na primeira linha vazia logo abaixo da tabela: ela cresce sozinha e leva formato, listas e validações.'],
         ['• Data: dd/mm/aaaa.   Cliente e Modalidade' + (UNI ? ', Depósito' : '') + ': escolha na lista (setinha da célula).'],
         ['• Números: só 0 ou maior. Toneladas aceitam casas decimais.'], ['• Deixe em branco o que não foi medido (não digite 0 se não houve registro).'],
-        ['SOMA NO MÊS', 1], [MODO === 'JSL' ? '• Veículos, pallets, toneladas, incidentes, no show, falta, folga, férias e desligamento: valor do dia.' : '• Veículos, pallets, toneladas, linhas NF, caixas, peças, itens, pedidos, incidentes, no show, falta, folga, férias e desligamento: valor do dia.'],
+        ['SOMA NO MÊS', 1], [MODO === 'JSL' ? '• Veículos, pallets, toneladas, caixas, pedidos faturados, bags, incidentes, no show, falta, folga, férias e desligamento: valor do dia.' : '• Veículos, pallets, toneladas, linhas NF, caixas, peças, itens, pedidos, incidentes, no show, falta, folga, férias e desligamento: valor do dia.'],
         ['ÚLTIMO VALOR DO MÊS', 1], ['• Backlog, posições disponíveis/ocupadas e efetivo: posição do dia (os painéis usam o último lançado).'],
         ['ALERTAS', 1], ['• Vermelho: mesma data e cliente lançados duas vezes.'], ['• Amarelo: linha incompleta (data sem cliente ou o contrário).'], ['• Verde em Posições Ocupadas: cliente excede o contratado (boa notícia: faturar excedente).'],
         ['• Desvios comportamentais e acidentes (CAF = com afastamento · SAF = sem afastamento): quantidade do dia.'],
@@ -4075,7 +4089,7 @@ $('out-tudo')?.addEventListener('click', () => {
       const depCols = UNI ? depsExp.map(d => `Depósito ${d}`) : [];
       const listaFiltro = ['Todos'].concat(depCols, clis.map(nomeCli));
       const GERAL = ['Todos'].concat(depCols), NF = GERAL.length + NV;
-      const SET_NOVO = MODO === 'TPC' ? ['in_vei', 'in_pal', 'in_ton', 'out_vei', 'out_pal', 'out_ton'].concat(SET_COMUM) : SET_JSL;   // padrão de vaga livre
+      const SET_NOVO = MODO === 'TPC' ? ['in_vei', 'in_pal', 'in_ton', 'out_vei', 'out_pal', 'out_ton'].concat(SET_COMUM) : SET_JSL.filter(k => !IND_JSL_OPC.includes(k));   // padrão de vaga livre
       const setSlot = j => SLOT[j].c ? setCli(SLOT[j].c) : SET_NOVO;
       // layout da Config (tabela 1: cadastro + cards; tabela 2: colunas da BD; textos; parâmetros; catálogo)
       const CG0 = 9, CAD0 = CG0 + GERAL.length, CADN = CAD0 + NV - 1;
@@ -5497,6 +5511,8 @@ $('out-tudo')?.addEventListener('click', () => {
     "incidentes": [ { "DATA": "46270", "CLIENTE": "NESTLE", "QUANTIDADE": 1,   (opcional)
                       "TIPO": "Avaria", "GRAVIDADE": "Alta", "DESCRICAO": "Pallet tombado na doca 2" } ]
   }
+  JSL: QUANT_CAIXAS (IN = Caixas Recebidas · OUT = Caixas Expedidas), QUANT_PEDIDOS no outbound
+  (= Pedidos Faturados) e QUANT_BAGS em inbound/outbound (Bags Recebidos / Expedidos — só a Barry usa).
   Opcionais em inbound/outbound (linhas No show, Backlog, Falta, Folga e Férias do Excel):
     "NO_SHOW", "BACKLOG", "FALTA", "FOLGA", "FERIAS".
   METAS POR CLIENTE (JSL): lista "metaCliente", uma linha por CLIENTE:
