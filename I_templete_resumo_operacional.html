@@ -3859,6 +3859,8 @@ $('out-tudo')?.addEventListener('click', () => {
       'NESTLE': ['occ_disp', 'occ_tx']
     };
     SEM_IND_JSL['NESTLÉ'] = SEM_IND_JSL['NESTLE'];
+    // ── Grupos de clientes no filtro do Dashboard (somam os membros; demais abas continuam por cliente) ──
+    const GRUPOS_DASH = { TPC: [{ nome: 'Supply + Confiance', membros: ['SUPPLY', 'CONFIANCE'] }] };
     // ── Dashboard do Excel: perfil por cliente (linhas de apoio dos cards IN/OUT e gráficos 2 e 3) ──
     const IND_EXTRA_DASH = ['in_lnf', 'in_cx', 'in_cxr', 'in_bag', 'in_pec', 'in_itn', 'in_icm', 'in_cxf', 'in_cxm',
       'out_ped', 'out_pfat', 'out_itn', 'out_pec', 'out_lnf', 'out_cx', 'out_bag'];
@@ -4100,6 +4102,8 @@ $('out-tudo')?.addEventListener('click', () => {
       const depCols = UNI ? depsExp.map(d => `Depósito ${d}`) : [];
       const listaFiltro = ['Todos'].concat(depCols, clis.map(nomeCli));
       const GERAL = ['Todos'].concat(depCols), NF = GERAL.length + NV;
+      const GRUPOS = (GRUPOS_DASH[MODO] || []).map(g => ({ nome: g.nome, membros: g.membros.map(nomeCli) }));
+      const NG = GRUPOS.length, NGM = Math.max(1, ...GRUPOS.map(g => g.membros.length));
       const SET_NOVO = MODO === 'TPC' ? ['in_vei', 'in_pal', 'in_ton', 'out_vei', 'out_pal', 'out_ton'].concat(SET_COMUM) : SET_JSL.filter(k => !IND_JSL_OPC.includes(k));   // padrão de vaga livre
       const setSlot = j => SLOT[j].c ? setCli(SLOT[j].c) : SET_NOVO;
       // layout da Config (tabela 1: cadastro + cards; tabela 2: colunas da BD; textos; parâmetros; catálogo)
@@ -4222,7 +4226,17 @@ $('out-tudo')?.addEventListener('click', () => {
         // seleção (sempre do filtro da aba Indicadores)
         K.put(2, 1, 'Cliente selecionado', stL);
         K.put(2, 2, { f: `IF(OR(${celFiltro}="",${celFiltro}="Todos"),"Todos",${celFiltro})`, v: nomeSel }, { font: { b: 1, sz: 10 }, align: { h: 'left' } });
-        K.put(2, 3, { f: `IF(LEFT($B$2,9)="Depósito ",2,1)`, v: 1 }, { font: { sz: 9 } });
+        // grupos (filtro do Dashboard): tabela nome + membros, à direita da capacidade
+        const GR0 = 31, grpNomes = `${cN(L_CAP, GR0)}:${cN(L_CAP, GR0 + Math.max(1, NG) - 1)}`;
+        const grpMem = `${cN(L_CAP + 1, GR0)}:${cN(L_CAP + NGM, GR0 + Math.max(1, NG) - 1)}`;
+        const GMEM = `INDEX(${grpMem},MATCH($B$2,${grpNomes},0),0)`;
+        const GRP = principal && NG > 0;
+        if (GRP) {
+          K.put(GR0 - 1, L_CAP, 'Grupos (filtro do Dashboard)', stH); K.put(GR0 - 1, L_CAP + 1, 'Clientes do grupo', stH);
+          GRUPOS.forEach((g, i) => { K.put(GR0 + i, L_CAP, g.nome, { font: { b: 1, sz: 9 }, align: { h: 'left' } }); g.membros.forEach((m, j) => K.put(GR0 + i, L_CAP + 1 + j, m, { font: { sz: 9 }, align: { h: 'left' } })); });
+        }
+        const selGrupo = GRUPOS.find(g => g.nome === nomeSel);
+        K.put(2, 3, { f: GRP ? `IF(COUNTIF(${grpNomes},$B$2)>0,3,IF(LEFT($B$2,9)="Depósito ",2,1))` : `IF(LEFT($B$2,9)="Depósito ",2,1)`, v: selGrupo ? 3 : 1 }, { font: { sz: 9 } });
         K.put(2, 4, { f: `IF($C$2=2,MID($B$2,10,60),$B$2)`, v: nomeSel }, { font: { sz: 9 }, align: { h: 'left' } });
         K.put(2, 5, { f: `IFERROR(INDEX(${cN(L_DEPX, 12)}:${cN(L_DEPX, 11 + NF)},MATCH($B$2,${cN(L_CLI, 12)}:${cN(L_CLI, 11 + NF)},0)),"")`, v: TD ? rotDep : depC(clienteInicial) }, { font: { sz: 9 }, align: { h: 'left' } });
         K.put(3, 1, 'Capacidade (posições)', stL);
@@ -4246,6 +4260,10 @@ $('out-tudo')?.addEventListener('click', () => {
         K.put(9, 3, 'o mês anterior é comparado do dia 1 até este dia', stNota);
         const TODOS = `$B$2="Todos"`;
         const SEL = UNI ? `CHOOSE($C$2,${BC},${BDEP})` : BC;
+        // soma de fluxo da seleção (cliente / depósito / grupo) e valor de estoque por cliente (cliente / grupo)
+        const sumSel = (X, crit) => GRP ? `IF($C$2=3,SUMPRODUCT(SUMIFS(${X},${crit},${BC},${GMEM})),SUMIFS(${X},${crit},${SEL},$D$2))` : `SUMIFS(${X},${crit},${SEL},$D$2)`;
+        const pickCli = (linha, cab) => GRP ? `IF($C$2=3,IF(SUMPRODUCT(COUNTIF(${GMEM},${cab})*ISNUMBER(${linha}))=0,"",SUMPRODUCT(COUNTIF(${GMEM},${cab}),${linha})),IFERROR(INDEX(${linha},MATCH($D$2,${cab},0)),""))`
+          : `IFERROR(INDEX(${linha},MATCH($D$2,${cab},0)),"")`;
 
         // ---- listas (só na aba principal ficam as usadas pelas validações) ----
         K.put(11, L_MES, 'Meses (filtros das abas)', stH);
@@ -4268,6 +4286,12 @@ $('out-tudo')?.addEventListener('click', () => {
         }
         K.put(10, L_CLI, { f: `MAX(1,${cN(LCNT, 11 + NF)})`, v: Math.max(1, cheios.length) }, { font: { b: 1, sz: 8 } });
         K.put(10, L_CLI - 1, 'clientes', { font: { sz: 8 } });
+        if (GRP) {  // lista do filtro do Dashboard: Todos / depósitos + grupos + clientes
+          const L_DSH = LC + 6;
+          K.put(11, L_DSH, 'Filtro do Dashboard', stH); K.cols[L_DSH] = 22;
+          GERAL.concat(GRUPOS.map(g => g.nome)).forEach((nm, i) => K.put(12 + i, L_DSH, nm, { font: { sz: 9 }, align: { h: 'left' } }));
+          for (let j = 0; j < NV; j++) K.put(12 + GERAL.length + NG + j, L_DSH, { f: `${cN(L_CLI, 12 + GERAL.length + j)}&""`, v: cheios[j] ? cheios[j].nm : '' }, { font: { sz: 9 }, align: { h: 'left' } });
+        }
         K.put(12, L_CAP, 'Capacidade por depósito', stH); K.put(12, L_CAP + 1, 'Posições', stH);
         capDep.forEach(([d, v, fo], i) => {
           K.put(13 + i, L_CAP, d, { font: { b: 1, sz: 9 }, align: { h: 'left' } });
@@ -4324,7 +4348,7 @@ $('out-tudo')?.addEventListener('click', () => {
         });
         const hSoma = (H, r) => `IF(${TODOS},IF(COUNT(${H.linha(r)})=0,"",SUM(${H.linha(r)})),` +
           (UNI ? `IF($C$2=2,IF(SUMPRODUCT((${H.dep}=$D$2)*ISNUMBER(${H.linha(r)}))=0,"",SUMIF(${H.dep},$D$2,${H.linha(r)})),` : '') +
-          `IFERROR(INDEX(${H.linha(r)},MATCH($D$2,${H.cab},0)),"")` + (UNI ? ')' : '') + ')';
+          pickCli(H.linha(r), H.cab) + (UNI ? ')' : '') + ')';
 
         // ---- série diária ----
         ['Dia', 'Data'].concat(IND.map(d => `${GRUPOS_IND[d.g].rot} ${d.nome}`)).concat(['Faixa atenção', 'Faixa crítica']).forEach((h, i) => K.put(11, i + 1, h, stH));
@@ -4338,13 +4362,13 @@ $('out-tudo')?.addEventListener('click', () => {
             const c = ind.kc, st = { font: { sz: 9 }, fmt: ind.tipo === 'taxa' ? '0.0%' : ind.fmt === '#,##0.0' ? '#,##0.00' : ind.fmt };
             let f, v;
             if (ind.tipo === 'fluxo') {
-              f = `IF(${dt}="","",IF(${TODOS},SUMIFS(${BR(ind.k)},${BD},${dt}),SUMIFS(${BR(ind.k)},${BD},${dt},${SEL},$D$2)))`;
+              f = `IF(${dt}="","",IF(${TODOS},SUMIFS(${BR(ind.k)},${BD},${dt}),${sumSel(BR(ind.k), `${BD},${dt}`)}))`;
               v = valido ? somaDia(rowsSel, iso, ind.k) : '';
             } else if (ind.tipo === 'estoque') {
               const H = HLP[ind.k]; f = hSoma(H, H.hr + d); v = valido ? H.sel(H.dia[d - 1]) : '';
             } else if (ind.tipo === 'disp') {
               const H = HLP.occ_disp, oc = `${IND[IX.occ_ocup].L}${rr}`;
-              f = `IF(${oc}="","",IF(${TODOS},IF($B$4>0,$B$4,${hSoma(H, H.hr + d)}),${UNI ? `IF($C$2=2,${CAP_SEL},` : ''}IFERROR(INDEX(${H.linha(H.hr + d)},MATCH($D$2,${H.cab},0)),"")${UNI ? ')' : ''}))`;
+              f = `IF(${oc}="","",IF(${TODOS},IF($B$4>0,$B$4,${hSoma(H, H.hr + d)}),${UNI ? `IF($C$2=2,${CAP_SEL},` : ''}${pickCli(H.linha(H.hr + d), H.cab)}${UNI ? ')' : ''}))`;
               const ocH = valido ? HLP.occ_ocup.sel(HLP.occ_ocup.dia[d - 1]) : '';
               v = ocH === '' ? '' : TD ? (CAP_TOT > 0 ? CAP_TOT : H.sel(H.dia[d - 1])) : H.sel(H.dia[d - 1]);
               st.fmt = '#,##0;;';
@@ -4386,13 +4410,13 @@ $('out-tudo')?.addEventListener('click', () => {
           R.max = maxNum(vals); K.put(RS.max, c, { f: `IF(COUNT(${fx})=0,"",MAX(${fx}))`, v: R.max }, st());
           let fA, vA;
           if (ind.tipo === 'fluxo') {
-            fA = `IF($B$9=0,"",IF(${TODOS},SUMIFS(${BR(ind.k)},${critAnt}),SUMIFS(${BR(ind.k)},${critAntSel})))`;
+            fA = `IF($B$9=0,"",IF(${TODOS},SUMIFS(${BR(ind.k)},${critAnt}),${sumSel(BR(ind.k), critAnt)}))`;
             vA = ateDia ? somaInt(rowsAnt, ind.k) : '';
           } else if (ind.tipo === 'estoque') {
             const H = HLP[ind.k]; fA = `IF($B$9=0,"",${hSoma(H, H.prev)})`; vA = ateDia ? H.sel(H.ant) : '';
           } else if (ind.tipo === 'disp') {
             const oc = `${IND[IX.occ_ocup].L}${RS.ant}`, H = HLP.occ_disp;
-            fA = `IF(${oc}="","",IF(${TODOS},IF($B$4>0,$B$4,${hSoma(H, H.prev)}),${UNI ? `IF($C$2=2,${CAP_SEL},` : ''}IFERROR(INDEX(${H.linha(H.prev)},MATCH($D$2,${H.cab},0)),"")${UNI ? ')' : ''}))`;
+            fA = `IF(${oc}="","",IF(${TODOS},IF($B$4>0,$B$4,${hSoma(H, H.prev)}),${UNI ? `IF($C$2=2,${CAP_SEL},` : ''}${pickCli(H.linha(H.prev), H.cab)}${UNI ? ')' : ''}))`;
             const ocA = ateDia ? HLP.occ_ocup.sel(HLP.occ_ocup.ant) : '';
             vA = ocA === '' ? '' : TD ? (CAP_TOT > 0 ? CAP_TOT : H.sel(H.ant)) : H.sel(H.ant);
           } else {
@@ -4542,7 +4566,7 @@ $('out-tudo')?.addEventListener('click', () => {
           const nmR = rng(1), dpR = rng(2);
           const agg = c => `IF(${TODOS},IF(COUNT(${rng(c)})=0,"",SUM(${rng(c)})),` +
             (UNI ? `IF($C$2=2,IF(SUMPRODUCT((${dpR}=$D$2)*ISNUMBER(${rng(c)}))=0,"",SUMIF(${dpR},$D$2,${rng(c)})),` : '') +
-            `IFERROR(INDEX(${rng(c)},MATCH($D$2,${nmR},0)),"")` + (UNI ? ')' : '') + ')';
+            pickCli(rng(c), nmR) + (UNI ? ')' : '') + ')';
           const aggV = vals => TD ? (numeros(vals).length ? soma(vals) : '') : (() => { const j = listaCli.indexOf(nomeSel); return j < 0 ? '' : vals[j]; })();
           // indicadores do período
           const PK0 = PRL + 3;
@@ -4564,7 +4588,7 @@ $('out-tudo')?.addEventListener('click', () => {
               const cel = kk => `${L}${P[kk].r}`;
               let f, v;
               if (k === 'oci') { f = `IF(ISNUMBER(${cel('occ_tx')}),1-${cel('occ_tx')},"")`; v = num(P.occ_tx[w]) ? 1 - P.occ_tx[w] : ''; }
-              else if (k === 'hd') { f = `IF(${TODOS},SUMIFS(${BR('gen_efe')},${BD},">="&${a},${BD},"<="&${z}),SUMIFS(${BR('gen_efe')},${BD},">="&${a},${BD},"<="&${z},${SEL},$D$2))`; v = somaPer('gen_efe', i1, i2); }
+              else if (k === 'hd') { f = `IF(${TODOS},SUMIFS(${BR('gen_efe')},${BD},">="&${a},${BD},"<="&${z}),${sumSel(BR('gen_efe'), `${BD},">="&${a},${BD},"<="&${z}`)})`; v = somaPer('gen_efe', i1, i2); }
               else if (k === 'abs') { f = `IF(N(${cel('hd')})>0,N(${cel('gen_fal')})/${cel('hd')},"")`; v = P.hd[w] > 0 ? (P.gen_fal[w] || 0) / P.hd[w] : ''; }
               else if (k === 'turn') { f = `IF(N(${cel('gen_efe')})>0,N(${cel('gen_des')})/${cel('gen_efe')},"")`; v = num(P.gen_efe[w]) && P.gen_efe[w] > 0 ? (P.gen_des[w] || 0) / P.gen_efe[w] : ''; }
               else if (k === 'occ_tx') { f = `IF(AND(ISNUMBER(${cel('occ_ocup')}),ISNUMBER(${cel('occ_disp')})),IF(${cel('occ_disp')}>0,${cel('occ_ocup')}/${cel('occ_disp')},""),"")`; v = num(P.occ_ocup[w]) && num(P.occ_disp[w]) && P.occ_disp[w] > 0 ? P.occ_ocup[w] / P.occ_disp[w] : ''; }
@@ -4573,7 +4597,7 @@ $('out-tudo')?.addEventListener('click', () => {
                 v = !num(P.occ_ocup[w]) ? '' : TD ? (CAP_TOT > 0 ? CAP_TOT : aggV(cache.occ_disp[w])) : aggV(cache.occ_disp[w]);
               }
               else if (pc >= 0) { f = agg(colIdx); v = aggV(cache[k][w]); }
-              else { f = `IF(${TODOS},SUMIFS(${BR(k)},${BD},">="&${a},${BD},"<="&${z}),SUMIFS(${BR(k)},${BD},">="&${a},${BD},"<="&${z},${SEL},$D$2))`; v = somaPer(k, i1, i2); }
+              else { f = `IF(${TODOS},SUMIFS(${BR(k)},${BD},">="&${a},${BD},"<="&${z}),${sumSel(BR(k), `${BD},">="&${a},${BD},"<="&${z}`)})`; v = somaPer(k, i1, i2); }
               P[k][w] = v;
               K.put(rr, L === 'B' ? 2 : 3, { f, v }, { font: { sz: 9 }, fmt: pct(k) ? '0.0%' : ['in_ton', 'out_ton'].includes(k) ? '#,##0.0' : '#,##0' });
             });
@@ -4735,7 +4759,7 @@ $('out-tudo')?.addEventListener('click', () => {
           // ════ calculos: linha da seleção (lê a Config pelo filtro do Dashboard) ════
           const SR = PF0 - 1, iSel = Math.max(0, linhas.findIndex(l => l.nm === nomeSel)), pfSel = linhas[iSel].pf, flSel = flags(linhas[iSel].c);
           K.put(PF0 - 2, 1, 'PERFIL DO CLIENTE FILTRADO — lido da aba Config (linha da Config · por item: linha no período, rótulo, casas, linha do divisor · gráficos: colunas da série)', { font: { b: 1, sz: 10, color: XL_COR.vermelho }, align: { h: 'left' } });
-          K.put(SR, 1, { f: `IFERROR(MATCH($B$2,Config!$B$${CG0}:$B$${CADN},0),1)`, v: iSel + 1 }, { font: { b: 1, sz: 8 }, fmt: '0' });
+          K.put(SR, 1, { f: `IFERROR(MATCH(${GRP ? `IF($C$2=3,INDEX(${GMEM},1),$B$2)` : '$B$2'},Config!$B$${CG0}:$B$${CADN},0),1)`, v: iSel + 1 }, { font: { b: 1, sz: 8 }, fmt: '0' });
           const cel = c => `$${XL.colL(c)}$${SR}`;
           const nmC = j => { const L = XL.colL(COLMAP(j)); return `INDEX(Config!$${L}$${CG0}:$${L}$${CADN},$A$${SR})`; };
           const vk = (nm, col) => `IFERROR(VLOOKUP(${nm},${CATR},${col},0),0)`;
@@ -4946,7 +4970,8 @@ $('out-tudo')?.addEventListener('click', () => {
       // filtros: cliente + período (dia inicial / dia final)
       X.caixa(3, 2, 3, 3, UNI ? 'FILTRO  ▸' : 'CLIENTE  ▸', { font: { b: 1, sz: 12, color: XL_COR.tinta }, align: { h: 'right', indent: 1 } }, null);
       X.caixa(3, 4, 3, 9, nomeSel, { fill: XL_COR.entrada, font: { b: 1, sz: 13 }, unlocked: 1 }, ['medium', XL_COR.barra]);
-      X.dv.push({ sqref: 'D3', lista: LISTA_FILTRO, titulo: UNI ? 'Depósito ou cliente' : 'Cliente', msg: 'Escolha na lista. Cards e gráficos se atualizam.' });
+      const LISTA_DASH = NG ? `OFFSET(calculos!$${XL.colL(LC + 6)}$12,0,0,${GERAL.length + NG}+calculos!$${LCL}$10,1)` : LISTA_FILTRO;
+      X.dv.push({ sqref: 'D3', lista: LISTA_DASH, titulo: UNI ? 'Depósito ou cliente' : 'Cliente', msg: 'Escolha na lista. Cards e gráficos se atualizam.' });
       const PERx = C1.PER;
       X.caixa(3, 12, 3, 15, 'PERÍODO  ▸', { font: { b: 1, sz: 12, color: XL_COR.tinta }, align: { h: 'right', indent: 1 } }, null);
       const stData = { fill: XL_COR.entrada, font: { b: 1, sz: 12 }, fmt: 'dd/mm/yyyy', unlocked: 1 };
