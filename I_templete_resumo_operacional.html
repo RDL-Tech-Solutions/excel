@@ -1725,7 +1725,9 @@
         incGrav: String(campo(m, 'incidentegravidade', 'gravidadeincidente', 'ncgravidade') || '').trim(),
         // opcionais (usados na exportação Excel, layout Indicadores)
         noshow: numOuNulo(campo(m, 'noshow', 'quantnoshow')),
-        backlog: numOuNulo(campo(m, 'backlog', 'quantbacklog')),
+        backlog: numOuNulo(campo(m, 'backlogintralog', 'backlog', 'quantbacklog')),
+        bkc: numOuNulo(campo(m, 'backlogcliente', 'quantbacklogcliente')),
+        absh: numOuNulo(campo(m, 'absenteismohh', 'absenteismoh', 'absenteismohoras', 'horasabsenteismo', 'absenteismo')),
         falta: numOuNulo(campo(m, 'falta', 'faltas')),
         folga: numOuNulo(campo(m, 'folga', 'folgas')),
         ferias: numOuNulo(campo(m, 'ferias')),
@@ -1771,6 +1773,7 @@
         falta: n('falta', 'faltas'), folga: n('folga', 'folgas'), ferias: n('ferias'),
         desl: n('desligamento', 'desligamentos', 'desligados'), efe: n('efetivo', 'efetivoop'),
         dsv: n('desvioscomportamentais', 'desvioscomportamental', 'desvios'), caf: n('acidentescaf', 'acidentecaf', 'caf'), saf: n('acidentessaf', 'acidentesaf', 'saf'),
+        absh: n('absenteismohh', 'absenteismoh', 'absenteismohoras', 'horasabsenteismo', 'absenteismo'),
         obs: String(campo(m, 'obs', 'observacao') || '').trim()
       };
     }
@@ -1808,11 +1811,12 @@
       const n = (...k) => numOuNulo(campo(m, ...k));
       const dep = depDe(m, 'TPC');
       const base = { d, cli, dep, kg: null, obs: String(campo(m, 'obs', 'observacao') || '').trim(), inc: null, incDesc: '', incTipo: '', incGrav: '',
-        ped: null, efe: null, noshow: null, backlog: null, falta: null, folga: null, ferias: null, desl: null,
+        ped: null, efe: null, noshow: null, backlog: null, bkc: null, absh: null, falta: null, folga: null, ferias: null, desl: null,
         lnf: null, pec: null, icm: null, cxf: null, cxm: null, pfat: null, itn: null };
       const inb = Object.assign({}, base, {
         vei: n('veiculosrecebidosin', 'veiculosrecebidos'), pal: n('palletsmovimentadosin'), ton: n('toneladasmovimentadasin'), cx: n('caixasmovimentadasin'),
-        efe: n('efetivo', 'efetivoop'), inc: n('incidentes'), noshow: n('noshow'), backlog: n('backlog'),
+        efe: n('efetivo', 'efetivoop'), inc: n('incidentes'), noshow: n('noshow'), backlog: n('backlogintralog', 'backlog'), bkc: n('backlogcliente'),
+        absh: n('absenteismohh', 'absenteismoh', 'absenteismohoras', 'horasabsenteismo', 'absenteismo'),
         falta: n('falta', 'faltas'), folga: n('folga', 'folgas'), ferias: n('ferias'),
         desl: n('desligamentos', 'desligamento', 'desligados'),
         dsv: n('desvioscomportamentais', 'desvioscomportamental', 'desvios'), caf: n('acidentescaf', 'acidentecaf', 'caf'), saf: n('acidentessaf', 'acidentesaf', 'saf'),
@@ -1851,7 +1855,9 @@
       out_caixas: ['outcaixasexpedidas', 'caixasexpedidas', 'outexpedicoesdecaixas', 'outcaixas'],
       nc_max: ['incidentes', 'ncincidentes', 'ncmax'],
       noshow: ['noshow', 'ncnoshow'],
-      backlog: ['backlog', 'ncbacklog'],
+      backlog: ['backlogintralog', 'backlog', 'ncbacklog'],
+      backlog_cliente: ['backlogcliente', 'ncbacklogcliente'],
+      absenteismo_h: ['absenteismohh', 'absenteismoh', 'absenteismo'],
       posicoes: ['posicoesdisponiveis', 'pcontrato'],
       ocupadas: ['posicoesocupadas', 'pocupadas'],
       ocupacao: ['taxadeocupacao', 'taxaocupacao', 'tocupacao'],
@@ -3649,7 +3655,7 @@ $('out-tudo')?.addEventListener('click', () => {
             `<pageMargins left="0.25" right="0.25" top="0.4" bottom="0.4" header="0.2" footer="0.2"/>` +
             `<pageSetup paperSize="9" orientation="${this.paisagem ? 'landscape' : 'portrait'}" fitToWidth="1" fitToHeight="${this.umaPagina ? 1 : 0}"/>` +
             (this.imgs.length || this.charts.length ? '<drawing r:id="rId1"/>' : '') +
-            (this.tabela ? '<tableParts count="1"><tablePart r:id="rIdT1"/></tableParts>' : '') +
+            (() => { const tb = this.tabelas || (this.tabela ? [this.tabela] : []); return tb.length ? `<tableParts count="${tb.length}">${tb.map((_, i) => `<tablePart r:id="rIdT${i + 1}"/>`).join('')}</tableParts>` : ''; })() +
             `</worksheet>`;
         }
       }
@@ -3708,12 +3714,12 @@ $('out-tudo')?.addEventListener('click', () => {
           ctOver.push(`<Override PartName="/xl/worksheets/sheet${sid}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`);
           wbRels.push(`<Relationship Id="rId${sid}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${sid}.xml"/>`);
           const sRels = [];
-          if (a.tabela) {
-            const t = a.tabela, tid = ++nTab;
-            F.push({ name: `xl/tables/table${tid}.xml`, data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="${tid}" name="${t.nome}" displayName="${t.nome}" ref="${t.ref}" totalsRowShown="0"><autoFilter ref="${t.ref}"/><tableColumns count="${t.cols.length}">${t.cols.map((c, i) => `<tableColumn id="${i + 1}" name="${xe(c)}"/>`).join('')}</tableColumns><tableStyleInfo name="${t.estilo || 'TableStyleLight1'}" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/></table>` });
+          (a.tabelas || (a.tabela ? [a.tabela] : [])).forEach((t, ti) => {
+            const tid = ++nTab;
+            F.push({ name: `xl/tables/table${tid}.xml`, data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="${tid}" name="${t.nome}" displayName="${t.nome}" ref="${t.ref}" totalsRowShown="0"><autoFilter ref="${t.ref}"/><tableColumns count="${t.cols.length}">${t.cols.map((c, i) => `<tableColumn id="${i + 1}" name="${xe(c)}"/>`).join('')}</tableColumns><tableStyleInfo name="${t.estilo || 'TableStyleLight1'}" showFirstColumn="0" showLastColumn="0" showRowStripes="${t.listras === false ? 0 : 1}" showColumnStripes="0"/></table>` });
             ctOver.push(`<Override PartName="/xl/tables/table${tid}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml"/>`);
-            sRels.push(`<Relationship Id="rIdT1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table${tid}.xml"/>`);
-          }
+            sRels.push(`<Relationship Id="rIdT${ti + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/table" Target="../tables/table${tid}.xml"/>`);
+          });
           const fechaRels = () => { if (sRels.length) F.push({ name: `xl/worksheets/_rels/sheet${sid}.xml.rels`, data: `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sRels.join('')}</Relationships>` }); };
           if (!a.imgs.length && !a.charts.length) { fechaRels(); return; }
           const did = ++nDraw, dRels = [], anch = [];
@@ -3803,12 +3809,14 @@ $('out-tudo')?.addEventListener('click', () => {
         out_ton: I('OUT', 'Toneladas Movimentadas', 'OUT Toneladas Movimentadas', 'fluxo', 'maior', '#,##0.0', 'out_toneladas', 'toneladas', fo('ton')),
         nc_inc: I('NC', 'Incidentes', 'NC Incidentes', 'fluxo', 'menor', '#,##0', 'nc_max', 'incidentes', v => v.nc),
         nc_ns: I('NC', 'No show', 'NC No show', 'fluxo', 'menor', '#,##0', 'noshow', 'no show', v => v.noshow),
-        nc_bkl: I('NC', 'Backlog', 'NC Backlog', 'estoque', 'menor', '#,##0', 'backlog', 'backlog', v => v.backlog),
+        nc_bkl: I('NC', 'Backlog Intralog', 'NC Backlog Intralog', 'estoque', 'menor', '#,##0', 'backlog', 'backlog intralog', v => v.backlog),
+        nc_bkc: I('NC', 'Backlog Cliente', 'NC Backlog Cliente', 'estoque', 'menor', '#,##0', 'backlog_cliente', 'backlog cliente', v => v.backlogCli),
         occ_disp: I('OCC', 'Posições Disponíveis', 'Posições Disponíveis', 'disp', 'neutro', '#,##0', 'posicoes', 'disponíveis', v => v.disp),
         occ_ocup: I('OCC', 'Posições Ocupadas', 'Posições Ocupadas', 'estoque', 'neutro', '#,##0', 'ocupadas', 'ocupadas', v => v.ocup),
         occ_tx: I('OCC', 'Taxa de Ocupação', null, 'taxa', 'faixa', '0.0%', 'ocupacao', 'taxa', v => ok(v.disp) && ok(v.ocup) && v.disp > 0 ? v.ocup / v.disp : null),
         gen_efe: I('GEN', 'Efetivo Op.', 'Efetivo Op.', 'estoque', 'maior', '#,##0', 'efetivo', 'efetivo', v => v.efe),
         gen_fal: I('GEN', 'Falta', 'Falta', 'fluxo', 'menor', '#,##0', 'falta', 'faltas', v => v.falta),
+        gen_abh: I('GEN', 'Absenteísmo (H/H)', 'Absenteísmo (H/H)', 'fluxo', 'menor', '#,##0.0', 'absenteismo_h', 'horas', v => v.absh),
         gen_fol: I('GEN', 'Folga', 'Folga', 'fluxo', 'neutro', '#,##0', 'folga', 'folgas', v => v.folga),
         gen_fer: I('GEN', 'Férias', 'Férias', 'fluxo', 'neutro', '#,##0', 'ferias', 'férias', v => v.ferias),
         gen_des: I('GEN', 'Desligamento', 'Desligamento', 'fluxo', 'menor', '#,##0', 'desligamento', 'desligamentos', v => v.desl),
@@ -3818,14 +3826,14 @@ $('out-tudo')?.addEventListener('click', () => {
       };
     })();
     // JSL: caixas recebidas (IN), caixas expedidas e pedidos faturados (OUT); bags só para quem está em COM_IND_JSL
-    const SET_JSL = ['in_vei', 'in_pal', 'in_ton', 'in_cxr', 'in_bag', 'out_vei', 'out_pal', 'out_ton', 'out_cx', 'out_pfat', 'out_bag', 'nc_inc', 'nc_ns', 'nc_bkl',
-      'occ_disp', 'occ_ocup', 'occ_tx', 'gen_efe', 'gen_fal', 'gen_fol', 'gen_fer', 'gen_des', 'gen_dsv', 'gen_caf', 'gen_saf'];
+    const SET_JSL = ['in_vei', 'in_pal', 'in_ton', 'in_cxr', 'in_bag', 'out_vei', 'out_pal', 'out_ton', 'out_cx', 'out_pfat', 'out_bag', 'nc_inc', 'nc_ns', 'nc_bkl', 'nc_bkc',
+      'occ_disp', 'occ_ocup', 'occ_tx', 'gen_efe', 'gen_fal', 'gen_abh', 'gen_fol', 'gen_fer', 'gen_des', 'gen_dsv', 'gen_caf', 'gen_saf'];
     // (Peças Movimentadas IN/OUT saíram da TPC)
     const SET_TPC = ['in_vei', 'in_pal', 'in_ton', 'in_lnf', 'in_cx', 'in_itn', 'in_icm', 'in_cxf', 'in_cxm',
       'out_vei', 'out_ped', 'out_pfat', 'out_itn', 'out_lnf', 'out_cx', 'out_pal', 'out_ton',
-      'nc_inc', 'nc_ns', 'nc_bkl', 'occ_disp', 'occ_ocup', 'occ_tx', 'gen_efe', 'gen_fal', 'gen_fol', 'gen_fer', 'gen_des', 'gen_dsv', 'gen_caf', 'gen_saf'];
+      'nc_inc', 'nc_ns', 'nc_bkl', 'nc_bkc', 'occ_disp', 'occ_ocup', 'occ_tx', 'gen_efe', 'gen_fal', 'gen_abh', 'gen_fol', 'gen_fer', 'gen_des', 'gen_dsv', 'gen_caf', 'gen_saf'];
     const setDoDeposito = dep => dep === 'TPC' ? SET_TPC : SET_JSL;
-    const SET_COMUM = ['nc_inc', 'nc_ns', 'nc_bkl', 'occ_disp', 'occ_ocup', 'occ_tx', 'gen_efe', 'gen_fal', 'gen_fol', 'gen_fer', 'gen_des', 'gen_dsv', 'gen_caf', 'gen_saf'];
+    const SET_COMUM = ['nc_inc', 'nc_ns', 'nc_bkl', 'nc_bkc', 'occ_disp', 'occ_ocup', 'occ_tx', 'gen_efe', 'gen_fal', 'gen_abh', 'gen_fol', 'gen_fer', 'gen_des', 'gen_dsv', 'gen_caf', 'gen_saf'];
     // IN/OUT de cada cliente TPC, conforme o monitoramento pedido pelo cliente (Monitoramento_Clientes_2026)
     const IO_TPC = {
       'BASF': ['in_vei', 'in_pal', 'in_ton', 'out_vei', 'out_pal', 'out_ton'],
@@ -3937,7 +3945,7 @@ $('out-tudo')?.addEventListener('click', () => {
       const o = rocc[0];
       return {
         in: fin, out: fout, nc: incQ > 0 ? incQ : (fin || fout ? 0 : null), efe,
-        noshow: somaNula(todos, 'noshow'), backlog: somaNula(todos, 'backlog'), falta: somaNula(todos, 'falta'),
+        noshow: somaNula(todos, 'noshow'), backlog: somaNula(todos, 'backlog'), backlogCli: somaNula(todos, 'bkc'), absh: somaNula(todos, 'absh'), falta: somaNula(todos, 'falta'),
         folga: somaNula(todos, 'folga'), ferias: somaNula(todos, 'ferias'), desl: somaNula(todos, 'desl'),
         dsv: somaNula(todos, 'dsv'), caf: somaNula(todos, 'caf'), saf: somaNula(todos, 'saf'),
         disp: o ? o.contrato : null, ocup: o ? o.ocup : null,
@@ -4049,7 +4057,7 @@ $('out-tudo')?.addEventListener('click', () => {
         if (UNI) B.put(rr, B_DEP, b.dep, { font: { sz: 10 } });
       });
       const bFim = Math.max(BASE_R0, BASE_R0 + baseRows.length - 1);
-      B.tabela = { nome: 'tbBase', ref: `A2:${XL.colL(B_ULT)}${bFim}`, cols: BCOLS.map(c => c.t) };
+      B.tabelas = [{ nome: `tbBase${UNI ? '' : MODO}`, ref: `A2:${XL.colL(B_ULT)}${bFim}`, cols: BCOLS.map(c => c.t) }];
       // validações e alertas (valem para as linhas novas digitadas)
       const faixaB = c => `${XL.colL(c)}${BASE_R0}:${XL.colL(c)}${BASE_RN}`;
       B.dv.push({ tipo: 'date', sqref: faixaB(1), f1: String(XL.serial('2020-01-01')), titulo: 'Data', msg: 'dd/mm/aaaa', erro: 'Digite uma data válida (dd/mm/aaaa).' });
@@ -4105,7 +4113,7 @@ $('out-tudo')?.addEventListener('click', () => {
         ['card_in', 'Card IN · título', 'RECEBIMENTO (IN)'], ['in_big', 'Card IN · legenda do número', 'veículos recebidos'],
         ['card_out', 'Card OUT · título', 'EXPEDIÇÃO (OUT)'], ['out_big', 'Card OUT · legenda do número', 'veículos expedidos'],
         ['card_nc', 'Card NC · título', 'NC OPERACIONAL'], ['nc_big', 'Card NC · legenda do número', 'incidentes no período'],
-        ['nc_ns', 'Card NC · linha 1', 'NO SHOW'], ['nc_bkl', 'Card NC · linha 2', 'BACKLOG'],
+        ['nc_ns', 'Card NC · linha 1', 'NO SHOW'], ['nc_bkl', 'Card NC · linha 2', 'BACKLOG INTRALOG'], ['nc_bkc', 'Card NC · linha 3', 'BACKLOG CLIENTE'],
         ['card_occ', 'Card Ocupação · título', 'ÍNDICE DE OCUPAÇÃO (P.P)'], ['occ_cont', 'Card Ocupação · posições (cliente)', 'CONTRATADA'],
         ['occ_arm', 'Card Ocupação · posições (Todos / depósito)', 'ARMAZÉM'], ['occ_ocup', 'Card Ocupação · ocupadas', 'OCUPADA'],
         ['occ_tx', 'Card Ocupação · taxa', 'TX OCUPAÇÃO'], ['occ_oci', 'Card Ocupação · ociosidade', 'OCIOSIDADE'],
@@ -4168,9 +4176,11 @@ $('out-tudo')?.addEventListener('click', () => {
       B.caixa(MH - 1, MC0, MH - 1, MCN, 'METAS DO MÊS — preencha as células amarelas (vazio = sem meta · taxa de ocupação em %).' + (SEM_PA ? '' : ' Saem preenchidas com meta.metas do Power Automate.'),
         { fill: XL_COR.vermelho, font: { b: 1, sz: 10, color: 'FFFFFF' }, align: { h: 'left', indent: 1 }, border: { t: BORDA, l: BORDA, r: BORDA } }, null);
       const stHT = (extra = {}) => Object.assign({}, stHB, { border: { t: GRADE, b: BORDA, l: GRADE, r: GRADE } }, extra);
-      B.put(MH, MC0, 'INDICADOR', stHT({ align: { h: 'left', indent: 1 }, border: { t: GRADE, b: BORDA, l: BORDA, r: GRADE } }));
-      B.put(MH, MC1, 'TODOS', stHT()); B.cols[MC1] = 11; B.alt[MH] = 30;
-      colsMetaBD.forEach((nm, j) => { const js = j - depCols.length, ult = MC1 + 1 + j === MCN; B.put(MH, MC1 + 1 + j, js >= 0 ? cabSlot(js) : nm, stHT(ult ? { border: { t: GRADE, b: BORDA, l: GRADE, r: BORDA } } : {})); B.cols[MC1 + 1 + j] = 12; });
+      B.put(MH, MC0, 'Indicador', stHT({ align: { h: 'left', indent: 1 }, border: { t: GRADE, b: BORDA, l: BORDA, r: GRADE } }));
+      B.put(MH, MC1, 'Todos', stHT()); B.cols[MC1] = 11; B.alt[MH] = 30;
+      // tabela do Excel exige cabeçalho fixo: cliente atual ou "Vaga N" (renomeie para o nome do cliente ao incluí-lo)
+      const cabMeta = ['Indicador', 'Todos'].concat(colsMetaBD.map((nm, j) => { const js = j - depCols.length; return js < 0 ? nm : (nm || `Vaga ${js + 1}`); }));
+      colsMetaBD.forEach((nm, j) => { const ult = MC1 + 1 + j === MCN; B.put(MH, MC1 + 1 + j, cabMeta[j + 2], stHT(ult ? { border: { t: GRADE, b: BORDA, l: GRADE, r: BORDA } } : {})); B.cols[MC1 + 1 + j] = 12; });
       const MROW = {};
       META_KEYS.forEach((k, i) => {
         const rr = MH + 1 + i, ind = IND_CAT[k], fm = ind.tipo === 'taxa' ? '0%' : '#,##0';
@@ -4182,7 +4192,8 @@ $('out-tudo')?.addEventListener('click', () => {
         colsMetaBD.forEach((nm, j) => B.put(rr, MC1 + 1 + j, cliPorNome[nm] ? metaCliente(cliPorNome[nm], ind.meta) : metaCliente(nm.slice(9), ind.meta), stM(MC1 + 1 + j === MCN)));
       });
       B.dv.push({ tipo: 'decimal', sqref: `${XL.colL(MC1)}${MH + 1}:${XL.colL(MCN)}${MH + META_KEYS.length}`, f1: '0', titulo: 'Meta do mês', msg: 'Vazio = sem meta. Taxa de ocupação em %.', erro: 'Meta: use 0 ou um número maior.' });
-      B.put(MH + META_KEYS.length + 1, MC0, 'Colunas de cliente seguem o cadastro da aba Config (vaga livre = coluna sem nome). Vale para Dashboard, Monitoramento e Consol Mensal.', { font: { i: 1, sz: 8, color: '7F7F7F' }, align: { h: 'left' } });
+      B.tabelas.push({ nome: `tbMetas${UNI ? '' : MODO}`, ref: `${XL.colL(MC0)}${MH}:${XL.colL(MCN)}${MH + META_KEYS.length}`, cols: cabMeta, listras: false });
+      B.put(MH + META_KEYS.length + 1, MC0, 'Cliente novo: renomeie o cabeçalho "Vaga N" com o nome do cliente (igual ao da Config) e preencha as metas. Vale para Dashboard, Monitoramento e Consol Mensal.', { font: { i: 1, sz: 8, color: '7F7F7F' }, align: { h: 'left' } });
       const metaLinha = k => `BD!$${XL.colL(MC1)}$${MROW[k]}:$${XL.colL(MCN)}$${MROW[k]}`;
       const metaCab = `BD!$${XL.colL(MC1)}$${MH}:$${XL.colL(MCN)}$${MH}`;
       // ═══════════ ABAS DE CÁLCULO (ocultas) — mês vem da célula de filtro de cada aba ═══════════
@@ -4192,7 +4203,7 @@ $('out-tudo')?.addEventListener('click', () => {
       const FA = 3 + IND.length, FC = FA + 1;             // colunas das faixas de ocupação
       const LC = Math.max(FC + 3, 38);                    // colunas das listas (depois de tudo)
       const L_MES = LC, L_CLI = LC + 2, L_DEPX = LC + 3, L_TIT = LC + 5, L_CAP = LC + 8;
-      const HLP_KEYS = ['nc_bkl', 'occ_ocup', 'occ_disp', 'gen_efe'];
+      const HLP_KEYS = ['nc_bkl', 'nc_bkc', 'occ_ocup', 'occ_disp', 'gen_efe'];
 
       function montarCalc(nomeAba, celMes, principal, celFiltro) {
         const K = new XL.Aba(nomeAba, E);
@@ -4503,7 +4514,7 @@ $('out-tudo')?.addEventListener('click', () => {
           K.put(8, 6, { f: '$F$7-($G$7-$F$7+1)', v: sPI }, fD);
           K.put(8, 7, { f: '$F$7-1', v: sPF }, fD);
           // estoques: último valor de cada cliente dentro do período
-          const PSTK = ['nc_bkl', 'occ_ocup', 'occ_disp', 'gen_efe'];
+          const PSTK = ['nc_bkl', 'nc_bkc', 'occ_ocup', 'occ_disp', 'gen_efe'];
           K.put(PRB - 1, 1, 'PERÍODO DO DASHBOARD — último valor de cada cliente no período (backlog, posições, efetivo)', { font: { b: 1, sz: 10, color: XL_COR.vermelho }, align: { h: 'left' } });
           K.put(PRB, 1, 'Cliente', stH); K.put(PRB, 2, 'Depósito', stH);
           PSTK.forEach((k, j) => { K.put(PRB, 3 + 2 * j, `${IND_CAT[k].nome} · período`, stH); K.put(PRB, 4 + 2 * j, `${IND_CAT[k].nome} · anterior`, stH); });
@@ -4534,8 +4545,8 @@ $('out-tudo')?.addEventListener('click', () => {
           const PK0 = PRL + 3;
           K.put(PK0 - 1, 1, 'INDICADORES DO PERÍODO (cards do Dashboard)', { font: { b: 1, sz: 10, color: XL_COR.vermelho }, align: { h: 'left' } });
           ['Indicador', 'Período', 'Período anterior', 'Variação'].forEach((h, i) => K.put(PK0, 1 + i, h, stH));
-          const LIN = ['in_vei', 'in_pal', 'in_ton', 'out_vei', 'out_pal', 'out_ton', 'nc_inc', 'nc_ns', 'nc_bkl', 'occ_ocup', 'occ_disp', 'occ_tx', 'oci',
-            'gen_efe', 'hd', 'gen_fal', 'abs', 'gen_fol', 'gen_fer', 'gen_des', 'turn', 'gen_dsv', 'gen_caf', 'gen_saf']
+          const LIN = ['in_vei', 'in_pal', 'in_ton', 'out_vei', 'out_pal', 'out_ton', 'nc_inc', 'nc_ns', 'nc_bkl', 'nc_bkc', 'occ_ocup', 'occ_disp', 'occ_tx', 'oci',
+            'gen_efe', 'hd', 'gen_fal', 'gen_abh', 'abs', 'gen_fol', 'gen_fer', 'gen_des', 'turn', 'gen_dsv', 'gen_caf', 'gen_saf']
             .concat(IND_EXTRA_DASH.filter(k => IX[k] !== undefined));   // TPC: indicadores próprios de cada cliente
           const ROT = { oci: 'OCUPAÇÃO (P.P) · Ociosidade', hd: 'GENTE · Homem-dia (soma do efetivo diário)', abs: 'GENTE · Absenteísmo (H/H) = faltas ÷ homem-dia', turn: 'GENTE · Turnover = desligamentos ÷ efetivo' };
           const pct = k => ['occ_tx', 'oci', 'abs', 'turn'].includes(k);
@@ -4615,7 +4626,7 @@ $('out-tudo')?.addEventListener('click', () => {
           CF.caixa(1, 1, 1, NCC, `CONFIG · CLIENTES E DASHBOARD (${UNI ? DEPOSITOS.join(' + ') : MODO})`, { fill: XL_COR.tinta, font: { b: 1, sz: 14, color: 'FFFFFF' }, align: { h: 'left', indent: 1 } });
           const AJUDA = [
             'COMO USAR — a aba é protegida: Revisão › Desproteger Planilha (mesma senha da pasta), faça o ajuste e proteja de novo. Células amarelas = editáveis. Tudo se atualiza na hora; não precisa gerar o arquivo de novo.',
-            'INCLUIR CLIENTE: (1) tabela 1 › escreva o nome numa vaga livre (coluna CLIENTE)' + (UNI ? ' e escolha o DEPÓSITO' : '') + '; (2) tabela 2 › marque Sim/Não nas colunas da BD que ele preenche; (3) tabela 1 › ajuste cards e gráficos (já vêm no padrão); (4) aba BD › preencha as metas na coluna dele; (5) aba Monitoramento (desproteger) › reexiba as linhas de uma vaga livre no fim da aba, digite o nome na coluna CLIENTE e exclua as linhas que ele não usa.',
+            'INCLUIR CLIENTE: (1) tabela 1 › escreva o nome numa vaga livre (coluna CLIENTE)' + (UNI ? ' e escolha o DEPÓSITO' : '') + '; (2) tabela 2 › marque Sim/Não nas colunas da BD que ele preenche; (3) tabela 1 › ajuste cards e gráficos (já vêm no padrão); (4) aba BD › na tabela de metas, renomeie o cabeçalho "Vaga N" com o nome do cliente e preencha as metas; (5) aba Monitoramento (desproteger) › reexiba as linhas de uma vaga livre no fim da aba, digite o nome na coluna CLIENTE e exclua as linhas que ele não usa.',
             'EXCLUIR CLIENTE: apague o nome na tabela 1 (a vaga fica livre e o cliente some dos filtros e do Consol Mensal) e, na aba Monitoramento, oculte ou exclua as linhas do bloco dele. As linhas antigas da BD continuam no histórico (somam em "Todos" nos meses em que existiram).',
             'RENOMEAR: troque o nome na tabela 1 e, na BD, use Localizar e Substituir no nome antigo (Ctrl+L / Ctrl+H). O nome da BD precisa ser igual ao da tabela 1.'
           ];
@@ -4989,10 +5000,10 @@ $('out-tudo')?.addEventListener('click', () => {
       };
       // na: { f, v } = condição "card não se aplica ao cliente filtrado" (aba Config)
       // rot: texto da Config ({ ref, v })
-      const grande = (c0, cz, k, rot, na) => {
+      const grande = (c0, cz, k, rot, na, alto = 3) => {
         const val = na ? { f: `IF(${na.f},"—",${PR(k)})`, v: na.v ? '—' : PP(k).at } : { f: PR(k), v: PP(k).at };
-        X.caixa(RC1, c0, RC1 + 2, cz, val, { fill: fundo, font: { b: 1, sz: 30, color: XL_COR.tinta }, fmt: '#,##0', align: { h: 'center', v: 'center' } }, null);
-        X.caixa(RC1 + 3, c0, RC1 + 3, cz, na ? { f: `IF(${na.f},"não se aplica a este cliente",${rot.ref}&"")`, v: na.v ? 'não se aplica a este cliente' : rot.v } : { f: `${rot.ref}&""`, v: rot.v }, { fill: fundo, font: { b: 1, sz: 10, color: XL_COR.cinzaTxt } }, null);
+        X.caixa(RC1, c0, RC1 + alto - 1, cz, val, { fill: fundo, font: { b: 1, sz: alto < 3 ? 26 : 30, color: XL_COR.tinta }, fmt: '#,##0', align: { h: 'center', v: 'center' } }, null);
+        X.caixa(RC1 + alto, c0, RC1 + alto, cz, na ? { f: `IF(${na.f},"não se aplica a este cliente",${rot.ref}&"")`, v: na.v ? 'não se aplica a este cliente' : rot.v } : { f: `${rot.ref}&""`, v: rot.v }, { fill: fundo, font: { b: 1, sz: 10, color: XL_COR.cinzaTxt } }, null);
       };
       const apoio = (rr, c0, cz, k, fmt) => X.caixa(rr, c0, rr, cz, { f: PR(k), v: PP(k).at }, { fill: fundo, font: { sz: 10, color: '6E7078' }, fmt }, null);
       // IN
@@ -5011,9 +5022,10 @@ $('out-tudo')?.addEventListener('click', () => {
       variacao(c0, cz, 'out_vei', 'maior', naCard('out'));
       // NC OPERACIONAL
       [c0, cz] = tile(2, T('card_nc'), XL_COR.nc, XL_IMG.nc);
-      grande(c0, cz, 'nc_inc', TXT.nc_big);
-      linha(RC1 + 4, c0, cz, T('nc_ns'), { f: PR('nc_ns'), v: PP('nc_ns').at }, '#,##0');
-      linha(RC1 + 5, c0, cz, T('nc_bkl'), { f: PR('nc_bkl'), v: PP('nc_bkl').at }, '#,##0', true);
+      grande(c0, cz, 'nc_inc', TXT.nc_big, null, 2);
+      linha(RC1 + 3, c0, cz, T('nc_ns'), { f: PR('nc_ns'), v: PP('nc_ns').at }, '#,##0');
+      linha(RC1 + 4, c0, cz, T('nc_bkl'), { f: PR('nc_bkl'), v: PP('nc_bkl').at }, '#,##0');
+      linha(RC1 + 5, c0, cz, T('nc_bkc'), { f: PR('nc_bkc'), v: PP('nc_bkc').at }, '#,##0', true);
       variacao(c0, cz, 'nc_inc', 'menor');
       // ÍNDICE DE OCUPAÇÃO (P.P)
       [c0, cz] = tile(3, T('card_occ'), XL_COR.occ, XL_IMG.occ);
@@ -5045,7 +5057,7 @@ $('out-tudo')?.addEventListener('click', () => {
       // GENTE
       [c0, cz] = tile(4, T('card_gen'), XL_COR.abs, XL_IMG.staff);
       linha(RC1, c0, cz, T('gen_efe'), { f: PR('gen_efe'), v: PP('gen_efe').at }, '#,##0');
-      linha(RC1 + 1, c0, cz, T('gen_abs'), { f: PR('abs'), v: PP('abs').at }, '0.0%');
+      linha(RC1 + 1, c0, cz, T('gen_abs'), { f: PR('gen_abh'), v: PP('gen_abh').at }, '#,##0.0" h"');
       linha(RC1 + 2, c0, cz, T('gen_fer'), { f: PR('gen_fer'), v: PP('gen_fer').at }, '#,##0');
       linha(RC1 + 3, c0, cz, T('gen_turn'), { f: PR('turn'), v: PP('turn').at }, '0.0%');
       linha(RC1 + 4, c0, cz, T('gen_dsv'), { f: PR('gen_dsv'), v: PP('gen_dsv').at }, '#,##0');
@@ -5086,7 +5098,7 @@ $('out-tudo')?.addEventListener('click', () => {
         series: [sPerf(g, 'in', 'sem', XL_COR.barra), sPerf(g, 'out', 'sem', 'A6A6A6')] });
       X.charts.push({ r1: g3, c1: XE[0], r2: g3 + HG - 1, c2: XE[1], xml: semPerf(C1.TIT.xspal, 'A') });
       X.charts.push({ r1: g3, c1: XD[0], r2: g3 + HG - 1, c2: XD[1], xml: semPerf(C1.TIT.xston, 'B') });
-      X.caixa(g3 + HG, 2, g3 + HG, XU, `Cards: período digitado (dia inicial e final). Gráficos: mês do dia inicial. Absenteísmo (H/H) = faltas ÷ homem-dia (soma do efetivo diário) · Turnover = desligamentos ÷ efetivo · CAF/SAF = acidentes com / sem afastamento. Metas: aba BD.${SEM_PA ? '' : ' Fonte: Power Automate · IntraLog.'}`, { font: { i: 1, sz: 8, color: '9A9A9A' }, align: { h: 'left' } }, null);
+      X.caixa(g3 + HG, 2, g3 + HG, XU, `Cards: período digitado (dia inicial e final). Gráficos: mês do dia inicial. Absenteísmo (H/H) = horas de ausência lançadas na BD (soma do período) · Turnover = desligamentos ÷ efetivo · CAF/SAF = acidentes com / sem afastamento. Metas: aba BD.${SEM_PA ? '' : ' Fonte: Power Automate · IntraLog.'}`, { font: { i: 1, sz: 8, color: '9A9A9A' }, align: { h: 'left' } }, null);
       X.areaImp = `$A$1:$${XL.colL(XU + 1)}$${g3 + HG}`;
       X.primeira = !UNI;
 
