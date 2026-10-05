@@ -1888,7 +1888,7 @@
       const temGen = ['efe', 'falta', 'absh', 'folga', 'ferias', 'desl', 'dsv', 'caf', 'saf'].some(k => gen[k] !== null);
       const disp = n('posicoesdisponiveis', 'posicoescontratadas'), ocup = n('posicoesocupadas');
       const modal = String(campo(m, 'modalidade') || '').trim().toUpperCase();
-      const contrato = disp && disp > 0 ? disp : null;
+      const contrato = disp && disp > 0 && modal !== 'SPOT' && modal !== 'CROSS' ? disp : null;   // Spot/Cross: sem contrato de posições
       const occ = ocup !== null || contrato || modal
         ? { d, cli, dep, contrato, tipo: contrato ? 'CONTRATO' : (modal || null), ocup, taxa: ocup === null || !contrato ? null : ocup / contrato, taxaPlan: null, obs: '' }
         : null;
