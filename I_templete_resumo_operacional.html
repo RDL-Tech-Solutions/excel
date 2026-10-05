@@ -4269,7 +4269,11 @@ $('out-tudo')?.addEventListener('click', () => {
         : depsExp.map(d => [d, (CAP_DEP[d] && CAP_DEP[d].valor) || 0, (CAP_DEP[d] && CAP_DEP[d].fonte) || '']);
       const CAP_TOT = capDep.reduce((a, x) => a + x[1], 0);
       const mkIni = mk, mkAnt = mesAnterior(mk), nAnt = diasNoMes(mkAnt);
-      const temNoMes = baseRows.filter(b => b.d.startsWith(mk));
+      // "último dia com dado" = última data com alguma coluna digitada (linhas só com Data/Cliente/Modalidade/
+      // Posições Disponíveis — que vêm da Config — não contam: a BD pode ter o mês todo já lançado em branco)
+      const KEYS_DIG = BASE_KEYS.filter(k => k !== 'occ_disp');
+      const temNoMes = baseRows.filter(b => b.d.startsWith(mk) && KEYS_DIG.some(k => ok(b.vals[k])));
+      const ultDiaF = (a, z) => `MAX(${KEYS_DIG.map(k => `_xlfn.MAXIFS(${BD},${BD},">="&${a},${BD},"<="&${z},${BR(k)},"<>")`).join(',')})`;
       const ateDia = temNoMes.length ? +temNoMes[temNoMes.length - 1].d.slice(8) : 0;
       const ateAnt = Math.min(Math.max(ateDia, 0), nAnt);
 
@@ -4357,7 +4361,8 @@ $('out-tudo')?.addEventListener('click', () => {
         K.put(8, 4, { f: 'IF($B$9=0,$C$8-1,$C$8+MIN($B$9,DAY($C$7-1))-1)', v: ateDia ? sAnt + ateAnt - 1 : sAnt - 1 }, { font: { sz: 9 }, fmt: 'dd/mm/yyyy' });
         K.put(8, 2, { f: `INDEX(${NOMES_MES_F},MONTH($C$8))&"/"&YEAR($C$8)`, v: rotuloMes(mkAnt) }, { font: { sz: 10 }, align: { h: 'left' } });
         K.put(9, 1, 'Último dia com dado no mês', stL);
-        K.put(9, 2, { f: `IF(COUNTIFS(${BD},">="&$C$7,${BD},"<="&$D$7)=0,0,DAY(_xlfn.MAXIFS(${BD},${BD},">="&$C$7,${BD},"<="&$D$7)))`, v: ateDia }, { font: { b: 1, sz: 10 }, fmt: '0', align: { h: 'left' } });
+        K.put(9, 5, { f: ultDiaF('$C$7', '$D$7'), v: temNoMes.length ? XL.serial(temNoMes[temNoMes.length - 1].d) : 0 }, { font: { sz: 8 }, fmt: 'dd/mm/yyyy' });
+        K.put(9, 2, { f: `IF($E$9=0,0,DAY($E$9))`, v: ateDia }, { font: { b: 1, sz: 10 }, fmt: '0', align: { h: 'left' } });
         K.put(9, 3, 'o mês anterior é comparado do dia 1 até este dia', stNota);
         const TODOS = `$B$2="Todos"`;
         const SEL = UNI ? `CHOOSE($C$2,${BC},${BDEP})` : BC;
@@ -5482,7 +5487,8 @@ $('out-tudo')?.addEventListener('click', () => {
         KD.put(3, 4, { f: 'DATE(YEAR($C$3),MONTH($C$3)+1,0)', v: XL.serial(`${mk}-${pad2(n)}`) }, { font: { sz: 9 }, fmt: 'dd/mm/yyyy' });
         KD.put(3, 2, { f: `INDEX(${NOMES_MES_F},MONTH($C$3))&"/"&YEAR($C$3)`, v: rotuloMes(mk) }, { font: { sz: 10 }, align: { h: 'left' } });
         KD.put(4, 1, 'Último dia com dado', { font: { b: 1, sz: 10 }, align: { h: 'left' } });
-        KD.put(4, 2, { f: `IF(COUNTIFS(${BD},">="&$C$3,${BD},"<="&$D$3)=0,0,DAY(_xlfn.MAXIFS(${BD},${BD},">="&$C$3,${BD},"<="&$D$3)))`, v: ateDia }, { font: { b: 1, sz: 10 }, fmt: '0' });
+        KD.put(4, 5, { f: ultDiaF('$C$3', '$D$3'), v: temNoMes.length ? XL.serial(temNoMes[temNoMes.length - 1].d) : 0 }, { font: { sz: 8 }, fmt: 'dd/mm/yyyy' });
+        KD.put(4, 2, { f: `IF($E$4=0,0,DAY($E$4))`, v: ateDia }, { font: { b: 1, sz: 10 }, fmt: '0' });
         const DEPS = depsExp;
         const capRef = {};
         DEPS.forEach((d, i) => {
