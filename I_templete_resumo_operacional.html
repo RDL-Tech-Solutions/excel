@@ -3626,7 +3626,7 @@ $('out-tudo')?.addEventListener('click', () => {
             return `<row r="${r}"${h ? ` ht="${h}" customHeight="1"` : ''}${this.ocultas.has(r) ? ' hidden="1"' : ''}>${cs}</row>`;
           }).join('');
           const cols = Object.keys(this.cols).map(Number).sort((a, b) => a - b)
-            .map(c => { const w = this.cols[c]; return `<col min="${c}" max="${c}" width="${Array.isArray(w) ? w[0] : w}" customWidth="1"${Array.isArray(w) && w[1] ? ' hidden="1"' : ''}/>`; }).join('');
+            .map(c => { const w = this.cols[c], ce = this.colEstilo && this.colEstilo[c]; return `<col min="${c}" max="${c}" width="${Array.isArray(w) ? w[0] : w}"${ce ? ` style="${this.E.id(ce)}"` : ''} customWidth="1"${Array.isArray(w) && w[1] ? ' hidden="1"' : ''}/>`; }).join('');
           let pane = '';
           if (this.freeze) {
             const [fr, fc] = this.freeze, xs = fc - 1, ys = fr - 1;
@@ -3641,7 +3641,7 @@ $('out-tudo')?.addEventListener('click', () => {
             `<sheetFormatPr defaultRowHeight="${this.defAlt}"/>` +
             (cols ? `<cols>${cols}</cols>` : '') +
             `<sheetData>${sd}</sheetData>` +
-            (this.senha ? `<sheetProtection password="${senhaExcel(this.senha)}" sheet="1" objects="1" scenarios="1"/>` : '') +
+            (this.senha ? `<sheetProtection password="${senhaExcel(this.senha)}" sheet="1" objects="1" scenarios="1"${this.protLivre || ''}/>` : '') +
             (this.filtro ? `<autoFilter ref="${this.filtro}"/>` : '') +
             (this.merges.length ? `<mergeCells count="${this.merges.length}">${this.merges.map(m => `<mergeCell ref="${m}"/>`).join('')}</mergeCells>` : '') +
             this.cf.map((c, i) => `<conditionalFormatting sqref="${c.sqref}"><cfRule type="expression" dxfId="${c.dxf}" priority="${i + 1}"${c.stop ? ' stopIfTrue="1"' : ''}><formula>${xe(c.f)}</formula></cfRule></conditionalFormatting>`).join('') +
@@ -4050,14 +4050,17 @@ $('out-tudo')?.addEventListener('click', () => {
       BCOLS.forEach((c, i) => { B.cols[i + 1] = c.w; B.put(2, i + 1, c.t, { fill: XL_COR.tinta, font: { b: 1, sz: 9, color: 'FFFFFF' }, align: { wrap: 1 } }); });
       baseRows.forEach((b, i) => {
         const rr = BASE_R0 + i;
-        B.put(rr, 1, XL.serial(b.d), { fmt: 'dd/mm/yyyy', font: { sz: 10 } });
-        B.put(rr, 2, b.nome, { font: { sz: 10 }, align: { h: 'left' } });
-        BASE_KEYS.forEach(k => B.put(rr, BI[k], ok(b.vals[k]) ? b.vals[k] : undefined, { fmt: BCOLS[BI[k] - 1].fmt, font: { sz: 10 } }));
+        B.put(rr, 1, XL.serial(b.d), { fmt: 'dd/mm/yyyy', font: { sz: 10 }, unlocked: 1 });
+        B.put(rr, 2, b.nome, { font: { sz: 10 }, align: { h: 'left' }, unlocked: 1 });
+        BASE_KEYS.forEach(k => B.put(rr, BI[k], ok(b.vals[k]) ? b.vals[k] : undefined, { fmt: BCOLS[BI[k] - 1].fmt, font: { sz: 10 }, unlocked: 1 }));
         B.put(rr, B_MOD, b.modal || undefined, { font: { sz: 10 } });
-        if (UNI) B.put(rr, B_DEP, b.dep, { font: { sz: 10 } });
+        if (UNI) B.put(rr, B_DEP, b.dep, { font: { sz: 10 }, unlocked: 1 });
       });
-      const bFim = Math.max(BASE_R0, BASE_R0 + baseRows.length - 1);
-      B.tabelas = [{ nome: `tbBase${UNI ? '' : MODO}`, ref: `A2:${XL.colL(B_ULT)}${bFim}`, cols: BCOLS.map(c => c.t) }];
+      // BD protegida (títulos travados): a tabela já vai até a última linha lida pelas fórmulas, pois aba protegida não deixa a tabela crescer
+      B.tabelas = [{ nome: `tbBase${UNI ? '' : MODO}`, ref: `A2:${XL.colL(B_ULT)}${BASE_RN}`, cols: BCOLS.map(c => c.t) }];
+      B.colEstilo = {};
+      BCOLS.forEach((c, i) => { if (i + 1 !== B_MOD) B.colEstilo[i + 1] = Object.assign({ font: { sz: 10 }, unlocked: 1 }, c.fmt ? { fmt: c.fmt } : {}, i === 1 ? { align: { h: 'left' } } : {}); });
+      B.protLivre = ' sort="0" autoFilter="0" formatColumns="0"';                // filtro, classificação e largura de coluna liberados
       // validações e alertas (valem para as linhas novas digitadas)
       const faixaB = c => `${XL.colL(c)}${BASE_R0}:${XL.colL(c)}${BASE_RN}`;
       B.dv.push({ tipo: 'date', sqref: faixaB(1), f1: String(XL.serial('2020-01-01')), titulo: 'Data', msg: 'dd/mm/aaaa', erro: 'Digite uma data válida (dd/mm/aaaa).' });
@@ -4074,7 +4077,7 @@ $('out-tudo')?.addEventListener('click', () => {
       const IC = B_ULT + 2;
       B.cols[B_ULT + 1] = 3; B.cols[IC] = 70;
       const instr = [
-        ['COMO PREENCHER A BD', 1], ['• Uma linha por dia e por cliente.'], ['• Digite na primeira linha vazia logo abaixo da tabela: ela cresce sozinha e leva formato, listas e validações.'],
+        ['COMO PREENCHER A BD', 1], ['• Uma linha por dia e por cliente.'], ['• Digite na primeira linha vazia da tabela (ela já vai até a linha 5001, com formato, listas e validações).'], ['• Títulos e colunas cinza são travados (aba protegida). Filtro e classificação continuam livres.'],
         ['• Data: dd/mm/aaaa.   Cliente' + (UNI ? ' e Depósito' : '') + ': escolha na lista (setinha da célula).'],
         ['• Modalidade e Posições Disponíveis (cinza) são automáticas: vêm da aba Config (MODALIDADE e POSIÇÕES CONTRATADAS do cliente).'],
         ['• Números: só 0 ou maior. Toneladas aceitam casas decimais.'], ['• Deixe em branco o que não foi medido (não digite 0 se não houve registro).'],
@@ -4185,7 +4188,7 @@ $('out-tudo')?.addEventListener('click', () => {
       META_KEYS.forEach((k, i) => {
         const rr = MH + 1 + i, ind = IND_CAT[k], fm = ind.tipo === 'taxa' ? '0%' : '#,##0';
         const fim = i === META_KEYS.length - 1, bb = fim ? BORDA : GRADE;
-        const stM = (ult) => ({ fill: XL_COR.entrada, font: { sz: 10, color: '0000FF' }, fmt: fm, border: { t: GRADE, b: bb, l: GRADE, r: ult ? BORDA : GRADE } });
+        const stM = (ult) => ({ fill: XL_COR.entrada, font: { sz: 10, color: '0000FF' }, fmt: fm, border: { t: GRADE, b: bb, l: GRADE, r: ult ? BORDA : GRADE }, unlocked: 1 });
         MROW[k] = rr;
         B.put(rr, MC0, `${GRUPOS_IND[ind.g].rot} · ${ind.nome}`, { fill: GRUPOS_IND[ind.g].cor, font: { b: 1, sz: 9 }, align: { h: 'left', indent: 1 }, border: { t: GRADE, b: bb, l: BORDA, r: GRADE } });
         B.put(rr, MC1, metaGeral(ind.meta), stM(MC1 === MCN));
@@ -4193,7 +4196,7 @@ $('out-tudo')?.addEventListener('click', () => {
       });
       B.dv.push({ tipo: 'decimal', sqref: `${XL.colL(MC1)}${MH + 1}:${XL.colL(MCN)}${MH + META_KEYS.length}`, f1: '0', titulo: 'Meta do mês', msg: 'Vazio = sem meta. Taxa de ocupação em %.', erro: 'Meta: use 0 ou um número maior.' });
       B.tabelas.push({ nome: `tbMetas${UNI ? '' : MODO}`, ref: `${XL.colL(MC0)}${MH}:${XL.colL(MCN)}${MH + META_KEYS.length}`, cols: cabMeta, listras: false });
-      B.put(MH + META_KEYS.length + 1, MC0, 'Cliente novo: renomeie o cabeçalho "Vaga N" com o nome do cliente (igual ao da Config) e preencha as metas. Vale para Dashboard, Monitoramento e Consol Mensal.', { font: { i: 1, sz: 8, color: '7F7F7F' }, align: { h: 'left' } });
+      B.put(MH + META_KEYS.length + 1, MC0, 'Cliente novo: desproteja a aba BD (senha), renomeie o cabeçalho "Vaga N" com o nome do cliente (igual ao da Config), proteja de novo e preencha as metas.', { font: { i: 1, sz: 8, color: '7F7F7F' }, align: { h: 'left' } });
       const metaLinha = k => `BD!$${XL.colL(MC1)}$${MROW[k]}:$${XL.colL(MCN)}$${MROW[k]}`;
       const metaCab = `BD!$${XL.colL(MC1)}$${MH}:$${XL.colL(MCN)}$${MH}`;
       // ═══════════ ABAS DE CÁLCULO (ocultas) — mês vem da célula de filtro de cada aba ═══════════
@@ -4626,7 +4629,7 @@ $('out-tudo')?.addEventListener('click', () => {
           CF.caixa(1, 1, 1, NCC, `CONFIG · CLIENTES E DASHBOARD (${UNI ? DEPOSITOS.join(' + ') : MODO})`, { fill: XL_COR.tinta, font: { b: 1, sz: 14, color: 'FFFFFF' }, align: { h: 'left', indent: 1 } });
           const AJUDA = [
             'COMO USAR — a aba é protegida: Revisão › Desproteger Planilha (mesma senha da pasta), faça o ajuste e proteja de novo. Células amarelas = editáveis. Tudo se atualiza na hora; não precisa gerar o arquivo de novo.',
-            'INCLUIR CLIENTE: (1) tabela 1 › escreva o nome numa vaga livre (coluna CLIENTE)' + (UNI ? ' e escolha o DEPÓSITO' : '') + '; (2) tabela 2 › marque Sim/Não nas colunas da BD que ele preenche; (3) tabela 1 › ajuste cards e gráficos (já vêm no padrão); (4) aba BD › na tabela de metas, renomeie o cabeçalho "Vaga N" com o nome do cliente e preencha as metas; (5) aba Monitoramento (desproteger) › reexiba as linhas de uma vaga livre no fim da aba, digite o nome na coluna CLIENTE e exclua as linhas que ele não usa.',
+            'INCLUIR CLIENTE: (1) tabela 1 › escreva o nome numa vaga livre (coluna CLIENTE)' + (UNI ? ' e escolha o DEPÓSITO' : '') + '; (2) tabela 2 › marque Sim/Não nas colunas da BD que ele preenche; (3) tabela 1 › ajuste cards e gráficos (já vêm no padrão); (4) aba BD (desproteger) › na tabela de metas, renomeie o cabeçalho "Vaga N" com o nome do cliente, proteja de novo e preencha as metas; (5) aba Monitoramento (desproteger) › reexiba as linhas de uma vaga livre no fim da aba, digite o nome na coluna CLIENTE e exclua as linhas que ele não usa.',
             'EXCLUIR CLIENTE: apague o nome na tabela 1 (a vaga fica livre e o cliente some dos filtros e do Consol Mensal) e, na aba Monitoramento, oculte ou exclua as linhas do bloco dele. As linhas antigas da BD continuam no histórico (somam em "Todos" nos meses em que existiram).',
             'RENOMEAR: troque o nome na tabela 1 e, na BD, use Localizar e Substituir no nome antigo (Ctrl+L / Ctrl+H). O nome da BD precisa ser igual ao da tabela 1.'
           ];
@@ -5338,7 +5341,7 @@ $('out-tudo')?.addEventListener('click', () => {
       const abas = UNI ? [extras[0], X, A, Q, C1.K, B, CFG_ABA, C2.K, extras[1]] : [X, A, Q, C1.K, B, CFG_ABA, C2.K];
       // proteção: só a BD fica livre; nas demais abas só os filtros (cliente, datas, mês) são editáveis
       const SENHA = MODO === 'TPC' ? 'tpc' : 'jsl';
-      abas.forEach(a => { if (a !== B) a.senha = SENHA; });
+      abas.forEach(a => { a.senha = SENHA; });                       // BD inclusive: só os lançamentos e as metas ficam livres
       return XL.pasta(abas, E, [], SENHA);
 
       function montarConsolidado() {
