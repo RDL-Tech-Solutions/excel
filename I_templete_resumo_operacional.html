@@ -522,6 +522,29 @@
       margin: 2px 0 12px
     }
 
+    /* ── Recebimento / Expedição: gráficos ─────────────────────────── */
+    .viz-row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-bottom: 16px }
+    .viz-row > .card { min-width: 0 }
+    .viz-row .chart-card-head { flex-wrap: wrap }
+    @media (min-width:1024px) { .viz-row.viz-2 { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr) } .viz-row.viz-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) } }
+    .viz-nota { margin: 0; font-size: 12px; color: var(--slate); text-align: right; white-space: nowrap }
+    .viz-nota b { color: var(--ink); font-weight: 600 }
+    .heat { overflow-x: auto; padding-bottom: 4px }
+    .heat-grid { display: grid; gap: 2px; min-width: 620px; align-items: center }
+    .heat-cab { font-size: 10px; color: #8A8C94; text-align: center; font-variant-numeric: tabular-nums; padding-bottom: 2px }
+    .heat-cab.fds { color: #B0B2B8 }
+    .heat-nome { font-size: 12px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 8px }
+    .heat-tot { font-size: 12px; color: var(--slate); text-align: right; padding-left: 8px; font-variant-numeric: tabular-nums; white-space: nowrap }
+    .heat-cel { height: 26px; border-radius: 4px; background: #F4F4F5; cursor: default; outline: none }
+    .heat-cel:hover, .heat-cel:focus-visible { box-shadow: 0 0 0 2px var(--ink) }
+    .heat-escala { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--slate); white-space: nowrap }
+    .heat-escala i { display: block; width: 110px; height: 8px; border-radius: 4px }
+    .heat-vazio { font-size: 12px; color: #9a9aa2; padding: 40px 0; text-align: center }
+    .viz-tip { position: fixed; z-index: 50; pointer-events: none; background: #1B1B1F; color: #fff; border-radius: 8px; padding: 8px 10px;
+      font-size: 12px; line-height: 1.35; box-shadow: var(--shadow-pop); opacity: 0; transition: opacity .1s }
+    .viz-tip strong { display: block; font-size: 13px; font-weight: 600 }
+    .viz-tip span { color: #C9CBD1 }
+
     .chart-toggle {
       display: flex;
       border: 1px solid var(--hair);
@@ -1336,53 +1359,60 @@
         </div>
       </div>
 
-      <div class="charts-row top">
+      <div class="viz-row viz-1">
         <div class="card chart-card">
           <div class="chart-card-head">
             <div>
               <h3>Movimento diário</h3>
-              <p class="sub" id="in-diario-sub"></p>
+              <p class="sub" id="in-v-diario-sub"></p>
             </div>
-            <div class="chart-toggle" data-target="in-diario">
-              <button data-type="bar" class="active" title="Barras" aria-label="Ver como barras">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-                  <rect x="4" y="11" width="4" height="8" />
-                  <rect x="10" y="6" width="4" height="13" />
-                  <rect x="16" y="3" width="4" height="16" />
-                </svg>
-              </button>
-              <button data-type="line" title="Linha" aria-label="Ver como linha">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
-                  stroke-linejoin="round">
-                  <polyline points="3 17 9 10 13 14 21 5" />
-                </svg>
-              </button>
-            </div>
+            <p class="viz-nota tnum" id="in-v-diario-nota"></p>
           </div>
-          <div class="chart-box-tall"><canvas id="c-in-diario"></canvas></div>
-        </div>
-        <div class="card chart-card">
-          <h3>Participação por cliente</h3>
-          <p class="sub" id="in-donut-sub"></p>
-          <div class="chart-box-tall"><canvas id="c-in-cliente"></canvas></div>
+          <div class="chart-box-tall"><canvas id="c-in-diario" role="img" aria-label="Movimento diário"></canvas></div>
         </div>
       </div>
 
-      <div class="charts-row bottom">
+      <div class="viz-row viz-2">
         <div class="card chart-card">
-          <h3>Volume e peso por cliente</h3>
-          <p class="sub">Caixas recebidas e toneladas descarregadas.</p>
-          <div class="chart-box"><canvas id="c-in-peso"></canvas></div>
+          <h3>Acumulado no período</h3>
+          <p class="sub" id="in-v-acum-sub"></p>
+          <div class="chart-box"><canvas id="c-in-acum" role="img" aria-label="Acumulado no período"></canvas></div>
         </div>
         <div class="card chart-card">
-          <h3>Veículos e pallets por cliente</h3>
-          <p class="sub">Carga de trabalho da doca em cada conta.</p>
-          <div class="chart-box"><canvas id="c-in-veic"></canvas></div>
+          <h3>Ranking por cliente</h3>
+          <p class="sub" id="in-v-rank-sub"></p>
+          <div class="chart-box" id="in-v-rank-box"><canvas id="c-in-ranking" role="img" aria-label="Ranking por cliente"></canvas></div>
+        </div>
+      </div>
+
+      <div class="viz-row viz-1">
+        <div class="card chart-card">
+          <div class="chart-card-head">
+            <div>
+              <h3>Mapa de calor · cliente × dia</h3>
+              <p class="sub" id="in-v-heat-sub"></p>
+            </div>
+            <div class="heat-escala" id="in-v-heat-escala"></div>
+          </div>
+          <div class="heat" id="in-v-heat"></div>
+        </div>
+      </div>
+
+      <div class="viz-row viz-3">
+        <div class="card chart-card">
+          <h3>Média por dia da semana</h3>
+          <p class="sub" id="in-v-dow-sub"></p>
+          <div class="chart-box"><canvas id="c-in-dow" role="img" aria-label="Média por dia da semana"></canvas></div>
         </div>
         <div class="card chart-card">
-          <h3>Distribuição na semana</h3>
-          <p class="sub">Caixas recebidas por dia da semana.</p>
-          <div class="chart-box"><canvas id="c-in-dow"></canvas></div>
+          <h3 id="in-v-prod-tit">Produtividade por veículo</h3>
+          <p class="sub" id="in-v-prod-sub"></p>
+          <div class="chart-box" id="in-v-prod-box"><canvas id="c-in-prod" role="img" aria-label="Produtividade por veículo"></canvas></div>
+        </div>
+        <div class="card chart-card">
+          <h3>Recebido × expedido</h3>
+          <p class="sub" id="in-v-bal-sub"></p>
+          <div class="chart-box" id="in-v-bal-box"><canvas id="c-in-balanco" role="img" aria-label="Recebido e expedido por cliente"></canvas></div>
         </div>
       </div>
 
@@ -1478,53 +1508,60 @@
         </div>
       </div>
 
-      <div class="charts-row top">
+      <div class="viz-row viz-1">
         <div class="card chart-card">
           <div class="chart-card-head">
             <div>
               <h3>Movimento diário</h3>
-              <p class="sub" id="out-diario-sub"></p>
+              <p class="sub" id="out-v-diario-sub"></p>
             </div>
-            <div class="chart-toggle" data-target="out-diario">
-              <button data-type="bar" class="active" title="Barras" aria-label="Ver como barras">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-                  <rect x="4" y="11" width="4" height="8" />
-                  <rect x="10" y="6" width="4" height="13" />
-                  <rect x="16" y="3" width="4" height="16" />
-                </svg>
-              </button>
-              <button data-type="line" title="Linha" aria-label="Ver como linha">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"
-                  stroke-linejoin="round">
-                  <polyline points="3 17 9 10 13 14 21 5" />
-                </svg>
-              </button>
-            </div>
+            <p class="viz-nota tnum" id="out-v-diario-nota"></p>
           </div>
-          <div class="chart-box-tall"><canvas id="c-out-diario"></canvas></div>
-        </div>
-        <div class="card chart-card">
-          <h3>Participação por cliente</h3>
-          <p class="sub" id="out-donut-sub"></p>
-          <div class="chart-box-tall"><canvas id="c-out-cliente"></canvas></div>
+          <div class="chart-box-tall"><canvas id="c-out-diario" role="img" aria-label="Movimento diário"></canvas></div>
         </div>
       </div>
 
-      <div class="charts-row bottom">
+      <div class="viz-row viz-2">
         <div class="card chart-card">
-          <h3>Volume e peso por cliente</h3>
-          <p class="sub">Caixas expedidas e toneladas embarcadas.</p>
-          <div class="chart-box"><canvas id="c-out-peso"></canvas></div>
+          <h3>Acumulado no período</h3>
+          <p class="sub" id="out-v-acum-sub"></p>
+          <div class="chart-box"><canvas id="c-out-acum" role="img" aria-label="Acumulado no período"></canvas></div>
         </div>
         <div class="card chart-card">
-          <h3>Veículos e pallets por cliente</h3>
-          <p class="sub">Carga de trabalho da doca em cada conta.</p>
-          <div class="chart-box"><canvas id="c-out-veic"></canvas></div>
+          <h3>Ranking por cliente</h3>
+          <p class="sub" id="out-v-rank-sub"></p>
+          <div class="chart-box" id="out-v-rank-box"><canvas id="c-out-ranking" role="img" aria-label="Ranking por cliente"></canvas></div>
+        </div>
+      </div>
+
+      <div class="viz-row viz-1">
+        <div class="card chart-card">
+          <div class="chart-card-head">
+            <div>
+              <h3>Mapa de calor · cliente × dia</h3>
+              <p class="sub" id="out-v-heat-sub"></p>
+            </div>
+            <div class="heat-escala" id="out-v-heat-escala"></div>
+          </div>
+          <div class="heat" id="out-v-heat"></div>
+        </div>
+      </div>
+
+      <div class="viz-row viz-3">
+        <div class="card chart-card">
+          <h3>Média por dia da semana</h3>
+          <p class="sub" id="out-v-dow-sub"></p>
+          <div class="chart-box"><canvas id="c-out-dow" role="img" aria-label="Média por dia da semana"></canvas></div>
         </div>
         <div class="card chart-card">
-          <h3>Recebido x Expedido</h3>
-          <p class="sub">Comparativo de caixas por cliente no período.</p>
-          <div class="chart-box"><canvas id="c-out-balanco"></canvas></div>
+          <h3 id="out-v-prod-tit">Produtividade por veículo</h3>
+          <p class="sub" id="out-v-prod-sub"></p>
+          <div class="chart-box" id="out-v-prod-box"><canvas id="c-out-prod" role="img" aria-label="Produtividade por veículo"></canvas></div>
+        </div>
+        <div class="card chart-card">
+          <h3>Recebido × expedido</h3>
+          <p class="sub" id="out-v-bal-sub"></p>
+          <div class="chart-box" id="out-v-bal-box"><canvas id="c-out-balanco" role="img" aria-label="Recebido e expedido por cliente"></canvas></div>
         </div>
       </div>
 
@@ -2152,6 +2189,8 @@
     function vazio(id) {
       if (charts[id]) { charts[id].destroy(); delete charts[id]; }
       const el = $(id); if (!el) return;
+      el.style.width = '100%'; el.style.height = '100%';
+      el.width = el.clientWidth || el.width; el.height = el.clientHeight || el.height;
       const ctx = el.getContext('2d');
       ctx.clearRect(0, 0, el.width, el.height);
       ctx.font = '500 12px Inter, sans-serif';
@@ -2183,8 +2222,6 @@
     // ══════════════════════════════════════════════════════════
     const COLS = ['Data', 'Dia da semana', 'Cliente', 'Caixas', 'Peso (kg)', 'Toneladas', 'Veículos', 'Pallets', 'Observação'];
 
-    // estado do tipo de gráfico (barra/linha) do "Movimento diário" por aba
-    const tipoDiario = { in: 'bar', out: 'bar' };
 
   function sincronizarFiltros(origem) {
 
@@ -2261,171 +2298,309 @@
         : '';
     }
 
-    function graficoDiario(p, it, metrica, M) {
-      const entrada = p === 'in';
-      const clientes = [...new Set(it.map(r => r.cli))].sort();
-      const dias = [...new Set(it.map(r => r.d))].sort();
-      const canvasId = 'c-' + p + '-diario';
-      $(p + '-diario-sub').textContent = M.rotulo + ' por dia' + (tipoDiario[p] === 'bar' ? ', empilhado por cliente.' : ', por cliente.');
-      if (!dias.length || soma(it, metrica) <= 0) { vazio(canvasId); return; }
-
-      const tipo = tipoDiario[p];
-      const datasets = clientes.map(c => ({
-        label: c,
-        data: dias.map(d => soma(it.filter(r => r.d === d && r.cli === c), metrica)),
-        backgroundColor: tipo === 'bar' ? corCliente(c) : corCliente(c) + '22',
-        borderColor: corCliente(c),
-        borderRadius: tipo === 'bar' ? 3 : undefined,
-        maxBarThickness: tipo === 'bar' ? 34 : undefined,
-        borderWidth: tipo === 'line' ? 2 : undefined,
-        tension: tipo === 'line' ? .3 : undefined,
-        pointRadius: tipo === 'line' ? 3 : undefined,
-        pointBackgroundColor: tipo === 'line' ? corCliente(c) : undefined,
-        fill: false
-      }));
-
-      draw(canvasId, {
-        type: tipo,
-        data: { labels: dias.map(fDataCurta), datasets },
-        options: {
-          interaction: { mode: 'index', intersect: false },
-          plugins: {
-            legend: { position: 'bottom' },
-            valueLabels: { display: false }, // rótulos ocultos aqui (muitas séries = poluição visual); use o tooltip
-            tooltip: { callbacks: { label: c => c.dataset.label + ': ' + M.fmt(c.parsed.y) } }
-          },
-          scales: {
-            x: { stacked: tipo === 'bar', grid: { display: false } },
-            y: { stacked: tipo === 'bar', grid, ticks: { callback: tickK }, title: { display: true, text: M.rotulo.toLowerCase(), font: { size: 10 } } }
-          }
-        }
-      });
+    // ══════════════════════════════════════════════════════════
+    // GRÁFICOS DE RECEBIMENTO / EXPEDIÇÃO
+    // Uma métrica por vez (seletor "Métrica dos gráficos"), um eixo por gráfico.
+    // Vermelho = fluxo da aba · cinza = contexto (período anterior, outro fluxo, outros clientes).
+    // ══════════════════════════════════════════════════════════
+    const VZ = { acento: '#C00000', contexto: '#8A8C94', grade: '#ECECEE', eixo: '#8A8C94', tinta: '#1B1B1F', suave: '#5B5D66', vazio: '#F4F4F5' };
+    // escala sequencial vermelha (claro = pouco, escuro = muito) — mapa de calor
+    const RAMPA = ['#FBE3E3', '#F5BDBD', '#EC8F8F', '#DE5A5A', '#C81E1E', '#9E0606', '#6E0000'];
+    function corRampa(t) {
+      const x = Math.max(0, Math.min(1, t)) * (RAMPA.length - 1), i = Math.min(RAMPA.length - 2, Math.floor(x)), f = x - i;
+      const h = c => [1, 3, 5].map(k => parseInt(c.slice(k, k + 2), 16));
+      const a = h(RAMPA[i]), b = h(RAMPA[i + 1]);
+      return '#' + a.map((v, k) => Math.round(v + (b[k] - v) * f).toString(16).padStart(2, '0')).join('');
     }
+    const vm = (r, m) => Number(r[m]) || 0;
+    const addDias = (iso, n) => { const d = new Date(iso + 'T00:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+    const diasEntre = (a, b) => Math.round((new Date(b + 'T00:00:00Z') - new Date(a + 'T00:00:00Z')) / 86400000);
+    const dowDe = iso => new Date(iso + 'T00:00:00Z').getUTCDay();
+    const BARRA = { borderRadius: 4, borderSkipped: 'start', maxBarThickness: 24 };
+    const eixoY = (fmt, extra = {}) => Object.assign({ grid: { color: VZ.grade, drawTicks: false }, border: { display: false }, ticks: { callback: fmt, padding: 6, color: VZ.eixo } }, extra);
+    const eixoX = (extra = {}) => Object.assign({ grid: { display: false }, border: { color: '#D9D9DE' }, ticks: { color: VZ.eixo } }, extra);
+
+    // rótulos seletivos: só onde o formatter devolve texto (pico, fim de linha, ponta de barra horizontal)
+    const rotulosViz = {
+      id: 'rotulosViz',
+      afterDatasetsDraw(chart, _a, cfg) {
+        if (!cfg || !cfg.formatter) return;
+        const { ctx } = chart, horiz = chart.options.indexAxis === 'y';
+        chart.data.datasets.forEach((ds, di) => {
+          const meta = chart.getDatasetMeta(di);
+          if (meta.hidden || ds.hidden) return;
+          meta.data.forEach((el, i) => {
+            const txt = cfg.formatter(ds.data[i], ds, i, di);
+            if (!txt) return;
+            ctx.save();
+            ctx.font = "600 11px 'Inter', sans-serif"; ctx.fillStyle = VZ.tinta;
+            if (horiz) { ctx.textAlign = 'left'; ctx.textBaseline = 'middle'; ctx.fillText(txt, el.x + 6, el.y); }
+            else if (meta.type === 'line') { ctx.textAlign = 'right'; ctx.textBaseline = 'bottom'; ctx.fillText(txt, el.x - 2, el.y - 8); }
+            else { ctx.textAlign = 'center'; ctx.textBaseline = 'bottom'; ctx.fillText(txt, el.x, el.y - 4); }
+            ctx.restore();
+          });
+        });
+      }
+    };
+    // linha de referência horizontal (média) com rótulo à direita
+    const linhaRef = {
+      id: 'linhaRef',
+      afterDatasetsDraw(chart, _a, cfg) {
+        if (!cfg || !(cfg.valor > 0)) return;
+        const { ctx, chartArea: ca, scales: { y } } = chart, yy = Math.round(y.getPixelForValue(cfg.valor)) + .5;
+        if (yy < ca.top || yy > ca.bottom) return;
+        ctx.save();
+        ctx.strokeStyle = VZ.tinta; ctx.lineWidth = 1; ctx.globalAlpha = .55;
+        ctx.beginPath(); ctx.moveTo(ca.left, yy); ctx.lineTo(ca.right, yy); ctx.stroke();
+        ctx.globalAlpha = 1; ctx.font = "600 11px 'Inter', sans-serif"; ctx.textAlign = 'right'; ctx.textBaseline = 'bottom';
+        const w = ctx.measureText(cfg.rotulo).width;
+        ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fillRect(ca.right - w - 6, yy - 17, w + 6, 15);
+        ctx.fillStyle = VZ.tinta; ctx.fillText(cfg.rotulo, ca.right - 3, yy - 3);
+        ctx.restore();
+      }
+    };
+    Chart.register(rotulosViz, linhaRef);
+
+    let vizTip = null;
+    function dica(ev, html) {
+      if (!vizTip) { vizTip = document.createElement('div'); vizTip.className = 'viz-tip'; vizTip.setAttribute('role', 'tooltip'); document.body.appendChild(vizTip); }
+      if (!html) { vizTip.style.opacity = 0; return; }
+      vizTip.replaceChildren(...html);
+      const r = ev.target.getBoundingClientRect(), x = ev.clientX ?? (r.left + r.width / 2), y = ev.clientY ?? r.top;
+      vizTip.style.opacity = 1;
+      const w = vizTip.offsetWidth, h = vizTip.offsetHeight;
+      vizTip.style.left = Math.min(window.innerWidth - w - 8, Math.max(8, x - w / 2)) + 'px';
+      vizTip.style.top = (y - h - 12 < 8 ? y + 18 : y - h - 12) + 'px';
+    }
+    const tipLinhas = (forte, ...linhas) => { const b = document.createElement('strong'); b.textContent = forte; return [b, ...linhas.map(t => { const s = document.createElement('span'); s.textContent = t; const d = document.createElement('div'); d.appendChild(s); return d; })]; };
+
+    // período (De/Até); sem datas, usa o intervalo dos registros filtrados
+    function periodo(p, it) {
+      const ds = it.map(r => r.d).sort();
+      let de = $(p + '-de').value || ds[0], ate = $(p + '-ate').value || ds[ds.length - 1];
+      if (!de || !ate) return null;
+      if (ate < de) [de, ate] = [ate, de];
+      return { de, ate, n: diasEntre(de, ate) + 1 };
+    }
+    // registros da mesma lista, mesmo cliente, outro intervalo (sem o filtro "ocultar dias sem movimento")
+    function registros(lista, de, ate, cli) { return lista.filter(r => r.d >= de && r.d <= ate && (!cli || r.cli === cli)); }
 
     function graficos(p, it) {
-      const metrica = $(p + '-metrica').value;
-      const M = METRICAS[metrica];
-      const entrada = p === 'in';
-      const clientes = [...new Set(it.map(r => r.cli))].sort();
-
-      graficoDiario(p, it, metrica, M);
-
-      // ── donut por cliente (com percentual permanente por fatia)
-      const porCli = clientes.map(c => [c, soma(it.filter(r => r.cli === c), metrica)]).filter(x => x[1] > 0).sort((a, b) => b[1] - a[1]);
-      $(p + '-donut-sub').textContent = M.rotulo + ' no período filtrado.';
-      if (porCli.length) {
-        const total = porCli.reduce((s, c) => s + c[1], 0);
-        draw('c-' + p + '-cliente', {
-          type: 'doughnut',
-          data: { labels: porCli.map(c => c[0]), datasets: [{ data: porCli.map(c => c[1]), backgroundColor: porCli.map(c => corCliente(c[0])), borderWidth: 3, borderColor: '#fff' }] },
-          options: {
-            cutout: '58%',
-            plugins: {
-              legend: { position: 'bottom' },
-              valueLabels: {
-                display: true, color: '#fff', font: "700 11px 'Inter', sans-serif", baseline: 'middle', offsetY: 0,
-                formatter: v => fDec(v / total * 100) + '%'
-              },
-              tooltip: { callbacks: { label: c => M.fmt(c.parsed) + ' · ' + fDec(c.parsed / total * 100) + '%' } }
-            }
-          }
-        });
-      } else vazio('c-' + p + '-cliente');
-
-      // ── caixas x toneladas por cliente (com rótulo permanente)
-      const ativos = clientes.filter(c => it.some(r => r.cli === c && temMov(r)));
-      if (ativos.length) {
-        draw('c-' + p + '-peso', {
-          type: 'bar',
-          data: {
-            labels: ativos,
-            datasets: [
-              { label: 'Caixas', data: ativos.map(c => soma(it.filter(r => r.cli === c), 'cx')), backgroundColor: '#C00000', borderRadius: 5, maxBarThickness: 38, yAxisID: 'y' },
-              { label: 'Toneladas', data: ativos.map(c => soma(it.filter(r => r.cli === c), 'ton')), backgroundColor: '#8A8C94', borderRadius: 5, maxBarThickness: 38, yAxisID: 'y2' }
-            ]
-          },
-          options: {
-            plugins: {
-              legend: { position: 'bottom' },
-              valueLabels: { display: true, formatter: (v, ds) => ds.label === 'Toneladas' ? fDec(v) : fInt(v) },
-              tooltip: { callbacks: { label: c => c.dataset.label + ': ' + (c.dataset.label === 'Toneladas' ? fDec(c.parsed.y) + ' t' : fInt(c.parsed.y)) } }
-            },
-            scales: {
-              x: { grid: { display: false } },
-              y: { position: 'left', grid, ticks: { callback: tickK }, title: { display: true, text: 'caixas', font: { size: 10 } } },
-              y2: { position: 'right', grid: { display: false }, ticks: { callback: v => fDec(v) }, title: { display: true, text: 'toneladas', font: { size: 10 } } }
-            }
-          }
-        });
-        draw('c-' + p + '-veic', {
-          type: 'bar',
-          data: {
-            labels: ativos,
-            datasets: [
-              { label: 'Pallets', data: ativos.map(c => soma(it.filter(r => r.cli === c), 'pal')), backgroundColor: '#C00000', borderRadius: 5, maxBarThickness: 38, yAxisID: 'y' },
-              { label: 'Veículos', data: ativos.map(c => soma(it.filter(r => r.cli === c), 'vei')), backgroundColor: '#8A8C94', borderRadius: 5, maxBarThickness: 38, yAxisID: 'y2' }
-            ]
-          },
-          options: {
-            plugins: {
-              legend: { position: 'bottom' },
-              valueLabels: { display: true, formatter: v => fInt(v) },
-              tooltip: { callbacks: { label: c => c.dataset.label + ': ' + fInt(c.parsed.y) } }
-            },
-            scales: {
-              x: { grid: { display: false } },
-              y: { position: 'left', grid, ticks: { precision: 0 }, title: { display: true, text: 'pallets', font: { size: 10 } } },
-              y2: { position: 'right', grid: { display: false }, ticks: { precision: 0 }, title: { display: true, text: 'veículos', font: { size: 10 } } }
-            }
-          }
-        });
-      } else { vazio('c-' + p + '-peso'); vazio('c-' + p + '-veic'); }
-
-      if (entrada) {
-        // ── dias da semana (com rótulo permanente)
-        const dows = new Array(7).fill(0);
-        it.forEach(r => { const d = new Date(r.d + 'T00:00:00'); if (!isNaN(d)) dows[d.getDay()] += r.cx; });
-        if (dows.some(v => v > 0)) {
-          draw('c-in-dow', {
-            type: 'bar',
-            data: { labels: DOW.map(d => d.slice(0, 3)), datasets: [{ data: dows, backgroundColor: '#C00000', borderRadius: 5, maxBarThickness: 40 }] },
-            options: {
-              plugins: {
-                legend: { display: false },
-                valueLabels: { display: true, formatter: v => fInt(v) },
-                tooltip: { callbacks: { title: c => DOW[c[0].dataIndex], label: c => fInt(c.parsed.y) + ' caixas' } }
-              },
-              scales: { x: { grid: { display: false } }, y: { grid, ticks: { callback: tickK } } }
-            }
-          });
-        } else vazio('c-in-dow');
-      } else {
-        // ── recebido x expedido (com rótulo permanente)
-        const de = $('out-de').value, ate = $('out-ate').value, cli = $('out-cliente').value;
-        const inb = DB.inbound.filter(r => (!de || r.d >= de) && (!ate || r.d <= ate) && (!cli || r.cli === cli));
-        const todos = [...new Set(inb.concat(it).map(r => r.cli))].sort()
-          .filter(c => soma(inb.filter(r => r.cli === c), 'cx') > 0 || soma(it.filter(r => r.cli === c), 'cx') > 0);
-        if (todos.length) {
-          draw('c-out-balanco', {
-            type: 'bar',
-            data: {
-              labels: todos,
-              datasets: [
-                { label: 'Recebido', data: todos.map(c => soma(inb.filter(r => r.cli === c), 'cx')), backgroundColor: '#8A8C94', borderRadius: 5, maxBarThickness: 34 },
-                { label: 'Expedido', data: todos.map(c => soma(it.filter(r => r.cli === c), 'cx')), backgroundColor: '#C00000', borderRadius: 5, maxBarThickness: 34 }
-              ]
-            },
-            options: {
-              plugins: {
-                legend: { position: 'bottom' },
-                valueLabels: { display: true, formatter: v => fInt(v) },
-                tooltip: { callbacks: { label: c => c.dataset.label + ': ' + fInt(c.parsed.y) + ' caixas' } }
-              },
-              scales: { x: { grid: { display: false } }, y: { grid, ticks: { callback: tickK } } }
-            }
-          });
-        } else vazio('c-out-balanco');
+      const metrica = $(p + '-metrica').value, M = METRICAS[metrica];
+      const entrada = p === 'in', rot = M.rotulo.toLowerCase(), fluxo = entrada ? 'recebid' : 'expedid';
+      const cliSel = $(p + '-cliente').value, lista = entrada ? DB.inbound : DB.outbound, outra = entrada ? DB.outbound : DB.inbound;
+      const P = periodo(p, it);
+      const fmtV = v => M.fmt(v), tick = metrica === 'ton' ? (v => fDec(v)) : tickK;
+      const ids = ['diario', 'acum', 'ranking', 'dow', 'prod', 'balanco'].map(k => 'c-' + p + '-' + k);
+      if (!P || !it.length) {
+        ids.forEach(vazio); $(p + '-v-heat').innerHTML = '<p class="heat-vazio">Sem movimento para os filtros aplicados</p>'; $(p + '-v-heat-escala').innerHTML = '';
+        ['diario-sub', 'diario-nota', 'acum-sub', 'rank-sub', 'heat-sub', 'dow-sub', 'prod-sub', 'bal-sub'].forEach(k => { $(p + '-v-' + k).textContent = ''; });
+        return;
       }
+      const clisPer = [...new Set(it.map(r => r.cli))].sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+      // ── 1. Movimento diário: total do dia (semanal se o período passar de 62 dias) + linha da média
+      const semanal = P.n > 62;
+      const baldes = [];
+      if (semanal) { let d = addDias(P.de, -((dowDe(P.de) + 6) % 7)); while (d <= P.ate) { baldes.push({ ini: d < P.de ? P.de : d, fim: addDias(d, 6) > P.ate ? P.ate : addDias(d, 6) }); d = addDias(d, 7); } }
+      else for (let i = 0; i < P.n; i++) { const d = addDias(P.de, i); baldes.push({ ini: d, fim: d }); }
+      baldes.forEach(b => { b.rows = it.filter(r => r.d >= b.ini && r.d <= b.fim); b.v = b.rows.reduce((s, r) => s + vm(r, metrica), 0); b.mov = b.rows.some(r => vm(r, metrica) > 0); });
+      const comMov = baldes.filter(b => b.mov), media = comMov.length ? comMov.reduce((s, b) => s + b.v, 0) / comMov.length : 0;
+      const iMax = baldes.reduce((im, b, i) => b.v > (baldes[im] ? baldes[im].v : -1) ? i : im, 0);
+      $(p + '-v-diario-sub').textContent = `${M.rotulo} ${fluxo}${metrica === 'cx' || metrica === 'ton' ? 'as' : 'os'} por ${semanal ? 'semana' : 'dia'}${cliSel ? ' · ' + cliSel : ' · todos os clientes'} — passe o mouse para ver por cliente.`;
+      const nota = $(p + '-v-diario-nota'); nota.replaceChildren();
+      if (comMov.length) { const b = document.createElement('b'); b.textContent = fmtV(media); nota.append('média por ' + (semanal ? 'semana' : 'dia com movimento') + ': ', b); }
+      if (comMov.length) {
+        draw(ids[0], {
+          type: 'bar',
+          data: { labels: baldes.map(b => semanal ? 'sem ' + fDataCurta(b.ini) : fDataCurta(b.ini)), datasets: [{ label: M.rotulo, data: baldes.map(b => b.mov ? b.v : null), backgroundColor: VZ.acento, hoverBackgroundColor: '#E01E1E', ...BARRA, categoryPercentage: .86, barPercentage: .9 }] },
+          options: {
+            plugins: {
+              legend: { display: false }, valueLabels: { display: false },
+              rotulosViz: { formatter: (v, _d, i) => i === iMax && v ? fmtV(v) : '' },
+              linhaRef: { valor: media, rotulo: 'média ' + fmtV(media) },
+              tooltip: { callbacks: {
+                title: c => { const b = baldes[c[0].dataIndex]; return semanal ? `${fData(b.ini)} a ${fData(b.fim)}` : `${DOW[dowDe(b.ini)]}, ${fData(b.ini)}`; },
+                label: c => `${M.rotulo}: ${fmtV(c.parsed.y)}`,
+                afterBody: c => { const b = baldes[c[0].dataIndex]; if (cliSel) return []; const pc = {}; b.rows.forEach(r => { pc[r.cli] = (pc[r.cli] || 0) + vm(r, metrica); });
+                  return Object.entries(pc).filter(x => x[1] > 0).sort((x, y) => y[1] - x[1]).map(([c2, v]) => `  ${c2}: ${fmtV(v)}`); }
+              } }
+            },
+            scales: { x: eixoX({ ticks: { color: VZ.eixo, maxRotation: 0, autoSkip: true, autoSkipPadding: 8 } }), y: eixoY(tick, { beginAtZero: true, grace: '8%' }) }
+          }
+        });
+      } else vazio(ids[0]);
+
+      // ── 2. Acumulado no período × período anterior de mesmo tamanho
+      const antAte = addDias(P.de, -1), antDe = addDias(P.de, -P.n);
+      const atual = registros(lista, P.de, P.ate, cliSel), ant = registros(lista, antDe, antAte, cliSel);
+      const acum = (rows, ini) => { let s = 0; const ultimo = rows.reduce((m, r) => vm(r, metrica) > 0 && r.d > m ? r.d : m, ''); return Array.from({ length: P.n }, (_, i) => { const d = addDias(ini, i); s += rows.filter(r => r.d === d).reduce((t, r) => t + vm(r, metrica), 0); return d <= ultimo ? s : null; }); };
+      const sAt = acum(atual, P.de), sAn = acum(ant, antDe);
+      const fimAt = sAt.reduce((m, v, i) => v !== null ? i : m, -1), fimAn = sAn.reduce((m, v, i) => v !== null ? i : m, -1);
+      const totAt = fimAt >= 0 ? sAt[fimAt] : 0, totAnIgual = fimAt >= 0 ? (sAn.slice(0, fimAt + 1).filter(v => v !== null).pop() || 0) : 0;
+      const varPct = totAnIgual > 0 ? (totAt / totAnIgual - 1) * 100 : null;
+      $(p + '-v-acum-sub').textContent = `${M.rotulo} somad${metrica === 'cx' || metrica === 'ton' ? 'as' : 'os'} dia a dia: ${fData(P.de)} a ${fData(P.ate)} × ${fData(antDe)} a ${fData(antAte)}` +
+        (varPct !== null ? ` · ${varPct >= 0 ? '▲' : '▼'} ${fDec(Math.abs(varPct))}% no mesmo ponto` : (sAn.some(v => v > 0) ? '' : ' · sem dados no período anterior')) + '.';
+      if (totAt > 0 || sAn.some(v => v > 0)) {
+        draw(ids[1], {
+          type: 'line',
+          data: {
+            labels: Array.from({ length: P.n }, (_, i) => fDataCurta(addDias(P.de, i))),
+            datasets: [
+              { label: 'Período atual', data: sAt, borderColor: VZ.acento, backgroundColor: 'rgba(192,0,0,.10)', fill: 'origin', borderWidth: 2, pointRadius: 0, pointHoverRadius: 5, pointHoverBorderWidth: 2, pointHoverBorderColor: '#fff', tension: 0, spanGaps: false },
+              { label: 'Período anterior', data: sAn, borderColor: VZ.contexto, backgroundColor: VZ.contexto, fill: false, borderWidth: 2, pointRadius: 0, pointHoverRadius: 5, pointHoverBorderWidth: 2, pointHoverBorderColor: '#fff', tension: 0 }
+            ]
+          },
+          options: {
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+              legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'line', boxWidth: 18 } }, valueLabels: { display: false },
+              rotulosViz: { formatter: (v, _d, i, di) => (di === 0 && i === fimAt) || (di === 1 && i === fimAn) ? fmtV(v) : '' },
+              tooltip: { callbacks: {
+                title: c => `Dia ${c[0].dataIndex + 1} do período`,
+                label: c => `${c.dataset.label} (${fData(addDias(c.datasetIndex === 0 ? P.de : antDe, c.dataIndex))}): ${fmtV(c.parsed.y)}`
+              } }
+            },
+            scales: { x: eixoX({ ticks: { color: VZ.eixo, maxRotation: 0, autoSkip: true, autoSkipPadding: 12 } }), y: eixoY(tick, { beginAtZero: true, grace: '10%' }) }
+          }
+        });
+      } else vazio(ids[1]);
+
+      // ── 3. Ranking por cliente (todos os clientes do período; o cliente filtrado fica em destaque)
+      const base = registros(lista, P.de, P.ate, '').filter(r => !$(p + '-somov').checked || temMov(r));
+      const rk = [...new Set(base.map(r => r.cli))].map(c => [c, base.filter(r => r.cli === c).reduce((s, r) => s + vm(r, metrica), 0)]).filter(x => x[1] > 0).sort((a, b) => b[1] - a[1]);
+      const totRk = rk.reduce((s, x) => s + x[1], 0);
+      $(p + '-v-rank-sub').textContent = `${M.rotulo} no período e participação no total${cliSel ? ' · ' + cliSel + ' em destaque' : ''}.`;
+      $(p + '-v-rank-box').style.height = Math.max(200, rk.length * 34 + 40) + 'px';
+      if (rk.length) {
+        draw(ids[2], {
+          type: 'bar',
+          data: { labels: rk.map(x => x[0]), datasets: [{ label: M.rotulo, data: rk.map(x => x[1]), backgroundColor: rk.map(x => !cliSel || x[0] === cliSel ? VZ.acento : VZ.contexto), ...BARRA, categoryPercentage: .9, barPercentage: .8 }] },
+          options: {
+            indexAxis: 'y', layout: { padding: { right: 96 } },
+            plugins: {
+              legend: { display: false }, valueLabels: { display: false },
+              rotulosViz: { formatter: v => `${fmtV(v)} · ${fDec(v / totRk * 100)}%` },
+              tooltip: { callbacks: { label: c => `${fmtV(c.parsed.x)} · ${fDec(c.parsed.x / totRk * 100)}% do total` } }
+            },
+            scales: { x: eixoY(tick, { beginAtZero: true, ticks: { callback: tick, color: VZ.eixo, maxTicksLimit: 5 } }), y: eixoX({ border: { display: false }, ticks: { color: VZ.tinta } }) }
+          }
+        });
+      } else vazio(ids[2]);
+
+      // ── 4. Mapa de calor cliente × dia (semana se o período for longo)
+      heatmap(p, it, clisPer, baldes, semanal, metrica, M);
+
+      // ── 5. Média por dia da semana (só dias com movimento)
+      const dSum = new Array(7).fill(0), dCnt = new Array(7).fill(0), porDia = {};
+      it.forEach(r => { porDia[r.d] = (porDia[r.d] || 0) + vm(r, metrica); });
+      Object.entries(porDia).forEach(([d, v]) => { if (v > 0) { const w = dowDe(d); dSum[w] += v; dCnt[w]++; } });
+      const ordem = [1, 2, 3, 4, 5, 6, 0], dMed = ordem.map(w => dCnt[w] ? dSum[w] / dCnt[w] : null);
+      $(p + '-v-dow-sub').textContent = `${M.rotulo} por dia, em média, nos dias com movimento.`;
+      if (dMed.some(v => v > 0)) {
+        draw(ids[3], {
+          type: 'bar',
+          data: { labels: ordem.map(w => DOW3[w]), datasets: [{ label: M.rotulo, data: dMed, backgroundColor: VZ.acento, ...BARRA, categoryPercentage: .8, barPercentage: .9 }] },
+          options: {
+            plugins: {
+              legend: { display: false }, valueLabels: { display: false },
+              rotulosViz: { formatter: v => v ? (metrica === 'ton' ? fDec(v) : tickK(Math.round(v))) : '' },
+              tooltip: { callbacks: { title: c => DOW[ordem[c[0].dataIndex]], label: c => `média ${fmtV(c.parsed.y)} · ${dCnt[ordem[c.dataIndex]]} ${dCnt[ordem[c.dataIndex]] === 1 ? 'dia' : 'dias'}` } }
+            },
+            scales: { x: eixoX(), y: eixoY(tick, { beginAtZero: true, grace: '12%' }) }
+          }
+        });
+      } else vazio(ids[3]);
+
+      // ── 6. Produtividade: métrica por veículo, por cliente (veículos → pallets por veículo)
+      const mp = metrica === 'vei' ? 'pal' : metrica, MP = METRICAS[mp], fPv = v => mp === 'cx' ? fInt(v) : fDec(v);
+      $(p + '-v-prod-tit').textContent = `${MP.rotulo} por veículo`;
+      const pr = clisPer.map(c => { const rs = it.filter(r => r.cli === c), v = soma(rs, 'vei'), q = rs.reduce((s, r) => s + vm(r, mp), 0); return [c, v > 0 && q > 0 ? q / v : 0, v]; }).filter(x => x[1] > 0).sort((a, b) => b[1] - a[1]);
+      const vTot = soma(it, 'vei'), qTot = it.reduce((s, r) => s + vm(r, mp), 0);
+      $(p + '-v-prod-sub').textContent = `Média do período${vTot > 0 && qTot > 0 ? ': ' + fPv(qTot / vTot) + (mp === 'ton' ? ' t' : '') + ' por veículo' : ''}.`;
+      $(p + '-v-prod-box').style.height = Math.max(200, pr.length * 34 + 40) + 'px';
+      if (pr.length) {
+        draw(ids[4], {
+          type: 'bar',
+          data: { labels: pr.map(x => x[0]), datasets: [{ label: `${MP.rotulo} por veículo`, data: pr.map(x => x[1]), backgroundColor: VZ.acento, ...BARRA, categoryPercentage: .9, barPercentage: .8 }] },
+          options: {
+            indexAxis: 'y', layout: { padding: { right: 52 } },
+            plugins: {
+              legend: { display: false }, valueLabels: { display: false },
+              rotulosViz: { formatter: v => fPv(v) },
+              tooltip: { callbacks: { label: c => `${fPv(c.parsed.x)}${mp === 'ton' ? ' t' : ''} por veículo · ${fInt(pr[c.dataIndex][2])} veículos` } }
+            },
+            scales: { x: eixoY(v => fDec(v), { beginAtZero: true, ticks: { callback: v => fDec(v), color: VZ.eixo, maxTicksLimit: 5 } }), y: eixoX({ border: { display: false }, ticks: { color: VZ.tinta } }) }
+          }
+        });
+      } else vazio(ids[4]);
+
+      // ── 7. Recebido × expedido por cliente (fluxo da aba em vermelho, o outro em cinza)
+      const outros = registros(outra, P.de, P.ate, cliSel);
+      const daAba = registros(lista, P.de, P.ate, cliSel);
+      const cb = [...new Set(daAba.concat(outros).map(r => r.cli))]
+        .map(c => [c, daAba.filter(r => r.cli === c).reduce((s, r) => s + vm(r, metrica), 0), outros.filter(r => r.cli === c).reduce((s, r) => s + vm(r, metrica), 0)])
+        .filter(x => x[1] > 0 || x[2] > 0).sort((a, b) => (b[1] + b[2]) - (a[1] + a[2]));
+      const rIn = entrada ? 1 : 2, rOut = entrada ? 2 : 1;
+      const tIn = cb.reduce((s, x) => s + x[rIn], 0), tOut = cb.reduce((s, x) => s + x[rOut], 0);
+      $(p + '-v-bal-sub').textContent = `${M.rotulo} no período · saldo ${tIn - tOut >= 0 ? '+' : '−'}${fmtV(Math.abs(tIn - tOut))} (recebido − expedido).`;
+      $(p + '-v-bal-box').style.height = Math.max(220, cb.length * 46 + 60) + 'px';
+      if (cb.length) {
+        const dsAba = { label: entrada ? 'Recebido' : 'Expedido', data: cb.map(x => x[1]), backgroundColor: VZ.acento, ...BARRA, categoryPercentage: .8, barPercentage: .92 };
+        const dsOutro = { label: entrada ? 'Expedido' : 'Recebido', data: cb.map(x => x[2]), backgroundColor: VZ.contexto, ...BARRA, categoryPercentage: .8, barPercentage: .92 };
+        draw(ids[5], {
+          type: 'bar',
+          data: { labels: cb.map(x => x[0]), datasets: entrada ? [dsAba, dsOutro] : [dsOutro, dsAba] },
+          options: {
+            indexAxis: 'y', layout: { padding: { right: 52 } },
+            plugins: {
+              legend: { position: 'bottom', labels: { usePointStyle: true, pointStyle: 'rect', boxWidth: 8 } }, valueLabels: { display: false },
+              rotulosViz: { formatter: v => v ? (metrica === 'ton' ? fDec(v) : tickK(v)) : '' },
+              tooltip: { callbacks: { label: c => `${c.dataset.label}: ${fmtV(c.parsed.x)}`,
+                afterBody: c => { const x = cb[c[0].dataIndex], sd = x[rIn] - x[rOut]; return [`Saldo: ${sd >= 0 ? '+' : '−'}${fmtV(Math.abs(sd))}`]; } } }
+            },
+            scales: { x: eixoY(tick, { beginAtZero: true, ticks: { callback: tick, color: VZ.eixo, maxTicksLimit: 5 } }), y: eixoX({ border: { display: false }, ticks: { color: VZ.tinta } }) }
+          }
+        });
+      } else vazio(ids[5]);
+    }
+
+    function heatmap(p, it, clis, baldes, semanal, metrica, M) {
+      const box = $(p + '-v-heat'), esc = $(p + '-v-heat-escala');
+      const cel = {}; let max = 0;
+      clis.forEach(c => { cel[c] = baldes.map(b => { const v = b.rows.filter(r => r.cli === c).reduce((s, r) => s + vm(r, metrica), 0); if (v > max) max = v; return v; }); });
+      const linhas = clis.filter(c => cel[c].some(v => v > 0));
+      $(p + '-v-heat-sub').textContent = `${M.rotulo} por cliente e ${semanal ? 'semana' : 'dia'} — quanto mais escuro, maior o volume; cinza = sem movimento.`;
+      if (!linhas.length) { box.innerHTML = '<p class="heat-vazio">Sem movimento para os filtros aplicados</p>'; esc.innerHTML = ''; return; }
+      esc.innerHTML = `<span>0</span><i style="background:linear-gradient(90deg,${RAMPA.join(',')})"></i><span class="tnum"></span>`;
+      esc.lastChild.textContent = M.fmt(max);
+      const g = document.createElement('div'); g.className = 'heat-grid';
+      g.style.gridTemplateColumns = `minmax(90px,140px) repeat(${baldes.length}, minmax(${semanal ? 18 : 12}px, 1fr)) minmax(64px,auto)`;
+      const add = (cls, txt) => { const d = document.createElement('div'); d.className = cls; if (txt !== undefined) d.textContent = txt; g.appendChild(d); return d; };
+      add('heat-cab', '');
+      // cabeçalho: um rótulo por coluna em períodos curtos; senão um rótulo dd/mm a cada 7 colunas (ocupa as 7)
+      const passo = baldes.length > 16 ? 7 : 1;
+      for (let i = 0; i < baldes.length; i += passo) {
+        const b = baldes[i], fds = passo === 1 && !semanal && [0, 6].includes(dowDe(b.ini));
+        const h = add('heat-cab' + (fds ? ' fds' : ''), passo > 1 || semanal ? fDataCurta(b.ini) : String(+b.ini.slice(8)));
+        if (passo > 1) { h.style.gridColumn = `span ${Math.min(passo, baldes.length - i)}`; h.style.textAlign = 'left'; }
+      }
+      add('heat-cab', 'total');
+      linhas.forEach(c => {
+        add('heat-nome', c).title = c;
+        cel[c].forEach((v, i) => {
+          const b = baldes[i], d = add('heat-cel');
+          if (v > 0) d.style.background = corRampa(max ? Math.sqrt(v / max) : 0);
+          d.tabIndex = 0;
+          const quando = semanal ? `${fData(b.ini)} a ${fData(b.fim)}` : `${DOW[dowDe(b.ini)]}, ${fData(b.ini)}`;
+          d.setAttribute('aria-label', `${c}, ${quando}: ${v > 0 ? M.fmt(v) : 'sem movimento'}`);
+          const mostra = ev => dica(ev, tipLinhas(v > 0 ? M.fmt(v) : 'sem movimento', c, quando));
+          d.addEventListener('pointermove', mostra); d.addEventListener('focus', mostra);
+          d.addEventListener('pointerleave', () => dica(null)); d.addEventListener('blur', () => dica(null));
+        });
+        add('heat-tot', M.fmt(cel[c].reduce((s, v) => s + v, 0)));
+      });
+      box.replaceChildren(g);
     }
 
     function tabela(p, it) {
@@ -3275,7 +3450,8 @@
     function periodoTotal(p) {
       const lista = p === 'in' ? DB.inbound : DB.outbound;
       if (!lista.length) return;
-      const datas = lista.map(r => r.d).sort();
+      // só dias com movimento (a planilha pode ter o mês todo já lançado em branco)
+      const mov = lista.filter(temMov), datas = (mov.length ? mov : lista).map(r => r.d).sort();
       $(p + '-de').value = datas[0];
       $(p + '-ate').value = datas[datas.length - 1];
     }
@@ -3327,7 +3503,8 @@
       opcoes($('out-cliente'), unicos(DB.outbound, 'cli'), 'Todos os clientes');
       periodoTotal('in'); periodoTotal('out');
       preencherSelects();
-      const datas = DB.inbound.concat(DB.outbound).map(r => r.d).sort();
+      const todas = DB.inbound.concat(DB.outbound), comMov = todas.filter(temMov);
+      const datas = (comMov.length ? comMov : todas).map(r => r.d).sort();
       const diasIn = new Set(DB.inbound.filter(temMov).map(r => r.d)).size;
       const diasOut = new Set(DB.outbound.filter(temMov).map(r => r.d)).size;
       $('periodo-label').textContent = datas.length
@@ -3425,18 +3602,6 @@ $('out-reset').addEventListener('click', () => {
 
 });
 document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => trocaAba(b.dataset.tab)));
-
-    document.querySelectorAll('.chart-toggle').forEach(grp => {
-      grp.querySelectorAll('button').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const alvo = grp.dataset.target; // "in-diario" ou "out-diario"
-          const p = alvo.split('-')[0];
-          tipoDiario[p] = btn.dataset.type;
-          grp.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
-          render(p);
-        });
-      });
-    });
 
     function aplicarPeriodo(de, ate) {
 
